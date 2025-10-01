@@ -1,0 +1,39 @@
+experiment:
+  name: "Generative"
+
+model:
+  type: "diffusion"            # options: vae, diffusion, flow, etc.
+  params:
+    timesteps: 1000
+    test_timesteps: 200
+  checkpoint: null  
+
+optimizer:
+  type: "adam"           # could also be sgd, adamw, etc.
+  lr: 0.001
+  weight_decay: 0.0
+
+training:
+  batch_size: 64
+  epochs: 50
+  device: "cuda"
+  metric_interval: 10 
+    
+dataset:
+  type: "mnist"       # options: mnist, imagenet, coco
+  params:
+    root: "/data/datasets/mnist/"
+    num_workers: 8
+    pin_memory: true
+    persistent_workers: true
+
+loss:
+  type: "diffusion_mse"       # options: vae_loss, diffusion_loss, cross_entropy, mse
+  params:
+    reduction: "mean"
+
+metrics:
+  fid:
+    type: "fid_inception"
+    params: 
+      samples: 16000
