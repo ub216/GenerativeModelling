@@ -1,2 +1,2 @@
-from losses.diffusion import DiffusionLoss
+from losses.pair_mse import PairMSELoss
 from losses.vae import VAELoss

@@ -27,7 +27,7 @@ dataset:
     persistent_workers: true
 
 loss:
-  type: "vae"       # options: vae_loss, diffusion_loss, cross_entropy, mse
+  type: "vae"       # options: vae_loss, pair_mse
   params:
     recon_loss_weight: 1.0
     kl_div_weight: 1.0

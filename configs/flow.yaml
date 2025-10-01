@@ -2,7 +2,7 @@ experiment:
   name: "Generative"
 
 model:
-  type: "diffusion"            # options: vae, diffusion, flow, etc.
+  type: "flow"            # options: vae, diffusion, flow, etc.
   params:
     timesteps: 1000
     test_timesteps: 200
@@ -28,7 +28,7 @@ dataset:
     persistent_workers: true
 
 loss:
-  type: "pair_mse"       # options: vae_loss, pair_mse
+  type: "pair_mse"       # options:
   params:
     reduction: "mean"
 

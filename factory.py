@@ -34,8 +34,8 @@ def get_loss_function(cfg):
     logger.info(f"Loss params: {params}")
     if name == "vae":
         return losses.VAELoss(**params)
-    elif name == "diffusion_mse":
-        return losses.DiffusionLoss(**params)
+    elif name == "pair_mse":
+        return losses.PairMSELoss(**params)
     else:
         raise ValueError(f"Unknown loss function: {name}")
 

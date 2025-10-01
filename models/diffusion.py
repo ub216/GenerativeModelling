@@ -2,12 +2,14 @@
 import math
 
 import torch
-import torch.nn as nn
 
 from models.base_model import BaseModel
 from models.simple_unet import SimpleUNet
 
 
+# -----------------------------
+# DDIM Model
+# -----------------------------
 class DiffusionModel(BaseModel):
     def __init__(
         self,
@@ -51,7 +53,7 @@ class DiffusionModel(BaseModel):
     # Sampling (ancestral reverse diffusion)
     # -------------------------
     @torch.no_grad()
-    def sample_ddpm(self, num_samples, device, img_size, batch_size=16):
+    def sample_ddpm(self, num_samples, device, img_size, batch_size=16, channels=1):
         """
         Generate samples by iteratively denoising from pure noise.
         num_samples: int
@@ -63,7 +65,6 @@ class DiffusionModel(BaseModel):
         self.unet.eval()
         schedule = self.test_schedule
         T = schedule["betas"].shape[0]
-        channels = 1  # assuming grayscale; adapt if needed
         samples = []
         for _ in range(math.ceil(num_samples / batch_size)):
             cur_bs = min(batch_size, num_samples - len(samples))

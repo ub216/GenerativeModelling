@@ -1,7 +1,7 @@
 import torch.nn.functional as F
 
 
-class DiffusionLoss:
+class PairMSELoss:
     def __init__(self, reduction="mean"):
         assert reduction in [
             "sum",

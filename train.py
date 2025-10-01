@@ -116,7 +116,7 @@ def train(
                     wandb.log({"FID": curr_score}, step=(epoch + 1) * len(dataloader))
                     logger.info(f"Epoch {epoch+1} FID: {curr_score:.4f}")
 
-            # Save best model
+            # Save best and last model
             if curr_score < prev_best_score or epoch + 1 == epochs:
                 prev_best_score = curr_score
                 checkpoint = {
@@ -176,11 +176,9 @@ def main(config_path="config.yaml"):
     # Load checkpoint if provided
     start_epoch = 0
     if cfg["model"].get("checkpoint", None) is not None:
-        ckpt = cfg['model']['checkpoint']
+        ckpt = cfg["model"]["checkpoint"]
         logger.info(f"Loaded model checkpoint from {ckpt}")
-        checkpoint = torch.load(
-            ckpt, map_location=cfg["training"]["device"]
-        )
+        checkpoint = torch.load(ckpt, map_location=cfg["training"]["device"])
         model.load_state_dict(checkpoint["model_state_dict"])
         model.to(cfg["training"]["device"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])

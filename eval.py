@@ -68,11 +68,9 @@ def main(config_path="config.yaml"):
     # Setup model
     model = get_model(cfg["model"])
     if cfg["model"].get("checkpoint", None) is not None:
-        ckpt = cfg['model']['checkpoint']
+        ckpt = cfg["model"]["checkpoint"]
         logger.info(f"Loaded model checkpoint from {ckpt}")
-        checkpoint = torch.load(
-            ckpt, map_location=cfg["training"]["device"]
-        )
+        checkpoint = torch.load(ckpt, map_location=cfg["training"]["device"])
         model.load_state_dict(checkpoint["model_state_dict"])
     else:
         logger.warning("No checkpoint provided, testing on random weights!")
@@ -83,7 +81,13 @@ def main(config_path="config.yaml"):
     # Metrics
     compute_metrics = get_metrics(cfg["metrics"])
 
-    eval(model, dataloader, compute_metrics, device=cfg["training"]["device"], save_dir=f"{run_dir}")
+    eval(
+        model,
+        dataloader,
+        compute_metrics,
+        device=cfg["training"]["device"],
+        save_dir=f"{run_dir}",
+    )
 
 
 if __name__ == "__main__":

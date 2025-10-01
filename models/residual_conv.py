@@ -1,43 +1,6 @@
 import torch
 from torch import nn
 
-
-class ResidualConv22(nn.Module):
-    def __init__(self, in_ch, out_ch, time_emb_dim=None):
-        super().__init__()
-        self.time_emb_dim = time_emb_dim
-        self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1)
-        self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1)
-        self.act = nn.SiLU()
-        self.norm1 = nn.GroupNorm(8, out_ch) if out_ch >= 8 else nn.BatchNorm2d(out_ch)
-        self.norm2 = nn.GroupNorm(8, out_ch) if out_ch >= 8 else nn.BatchNorm2d(out_ch)
-        if time_emb_dim is not None:
-            self.time_mlp = nn.Sequential(nn.SiLU(), nn.Linear(time_emb_dim, out_ch))
-        else:
-            self.time_mlp = None
-
-        if in_ch != out_ch:
-            self.shortcut = nn.Conv2d(in_ch, out_ch, 1)
-        else:
-            self.shortcut = nn.Identity()
-
-    def forward(self, x, t_emb=None):
-        h = self.conv1(x)
-        h = self.norm1(h)
-        h = self.act(h)
-
-        # add time embedding
-        if (self.time_mlp is not None) and (t_emb is not None):
-            # t_emb is (B, time_emb_dim) -> project & add across spatial dims
-            t_proj = self.time_mlp(t_emb)  # (B, out_ch)
-            h = h + t_proj[:, :, None, None]
-
-        h = self.conv2(h)
-        h = self.norm2(h)
-        out = self.act(h + self.shortcut(x))
-        return out
-
-
 class ResidualConv(nn.Module):
     """
     Residual block for encoder: Conv -> Norm -> Act (+time_embedding) -> Conv + Norm + skip
