@@ -40,6 +40,8 @@ def get_loss_function(cfg: Dict[str, Any]) -> torch.nn.Module:
         return losses.VAELoss(**params)
     elif name == "pair_mse":
         return losses.PairMSELoss(**params)
+    elif name == "gan_hinge_loss":
+        return losses.GANHingeLoss(**params)
     else:
         raise ValueError(f"Unknown loss function: {name}")
 
