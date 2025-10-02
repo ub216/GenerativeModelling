@@ -19,15 +19,19 @@ def eval_sample(model, num_samples, device, img_size, save_dir="./", dataloader=
     model.eval()
     with torch.no_grad():
         if dataloader is not None and model.has_conditional_generation:
-            cond = []
+            conditioning = []
             for _, lbls in dataloader:
-                cond.extend(lbls)
-                if len(cond) >= num_samples:
+                conditioning.extend(lbls)
+                if len(conditioning) >= num_samples:
                     break
-            cond = cond[:num_samples]
-            cond = drop_condition(cond, 0.25)
+            conditioning = conditioning[:num_samples]
+            conditioning = drop_condition(conditioning, 0.25)
             samples = model.sample(
-                num_samples, device, img_size, batch_size=num_samples, cond=cond
+                num_samples,
+                device,
+                img_size,
+                batch_size=num_samples,
+                conditioning=conditioning,
             )
         else:
             # unconditional sampling
@@ -38,7 +42,7 @@ def eval_sample(model, num_samples, device, img_size, save_dir="./", dataloader=
     # log a few images
     samples_cpu = samples.cpu()
     filename = f"{save_dir}/generated_samples.png"
-    save_eval_results(samples_cpu, filename=filename, cond=cond)
+    save_eval_results(samples_cpu, filename=filename, conditioning=conditioning)
     logger.info(f"Saved results to {filename}")
     return samples
 

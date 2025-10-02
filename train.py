@@ -29,9 +29,14 @@ def train_one_epoch(
         inputs = inputs.to(device, non_blocking=True)
         optimizer.zero_grad(set_to_none=True)
 
+        # Use labels only if model can do conditioning
+        conditioning = None
+        if model.has_conditional_generation:
+            conditioning = labels
+
         # forward pass with AMP
         with autocast(device_type="cuda", dtype=torch.float16):
-            outputs = model(inputs, cond=labels)
+            outputs = model(inputs, conditioning=conditioning)
             loss = criterion(outputs, inputs)
 
         # backward pass with AMP scaler
@@ -59,17 +64,22 @@ def eval_sample(
     model, num_samples, device, img_size, step=0, save_dir="./", dataloader=None
 ):
     model.eval()
+    conditioning = None
     with torch.no_grad():
         if dataloader is not None and model.has_conditional_generation:
-            cond = []
+            conditioning = []
             for _, lbls in dataloader:
-                cond.extend(lbls)
-                if len(cond) >= num_samples:
+                conditioning.extend(lbls)
+                if len(conditioning) >= num_samples:
                     break
-            cond = cond[:num_samples]
-            cond = drop_condition(cond, 0.25)
+            conditioning = conditioning[:num_samples]
+            conditioning = drop_condition(conditioning, 0.25)
             samples = model.sample(
-                num_samples, device, img_size, batch_size=num_samples, cond=cond
+                num_samples,
+                device,
+                img_size,
+                batch_size=num_samples,
+                conditioning=conditioning,
             )
         else:
             # unconditional sampling
@@ -83,7 +93,9 @@ def eval_sample(
         wandb.log({f"generated_{idx}": wandb.Image(samples_cpu[idx])}, step=step)
 
     save_eval_results(
-        samples_cpu, filename=f"{save_dir}/generated_samples_step_{step}.png", cond=cond
+        samples_cpu,
+        filename=f"{save_dir}/generated_samples_step_{step}.png",
+        conditioning=conditioning,
     )
     return samples
 
@@ -113,7 +125,7 @@ def train(
         )
         wandb.log({"epoch_loss": epoch_loss}, step=(epoch + 1) * len(dataloader))
 
-        # Generate evaluation samples
+        # Generate evaluation samples/metrics
         if (epoch + 1) % metric_interval == 0 or epoch + 1 == epochs:
             eval_sample(
                 model,
@@ -126,6 +138,7 @@ def train(
             )
             curr_score = prev_best_score
             for metric in compute_metrics:
+                # FID is computed on unconditioned input only
                 if type(metric) == metrics.FIDInception:
                     sampler_loader = model.wrap_sampler_to_loader(
                         num_samples=metric.samples,

@@ -85,7 +85,7 @@ class SimpleUNet(nn.Module):
             ch, in_channels, kernel_size=3, padding=1
         )  # predict noise
 
-    def forward(self, x, timesteps, cond=None):
+    def forward(self, x, timesteps, conditioning=None):
         """
         x: (B, C, H, W) noisy image
         timesteps: (B,) long
@@ -94,8 +94,8 @@ class SimpleUNet(nn.Module):
         time_emb = sinusoidal_embedding(timesteps, self.time_mlp[0].in_features)
         time_emb = self.time_mlp(time_emb)
         text_emb = (
-            self.text_model(cond)
-            if cond is not None and self.text_model is not None
+            self.text_model(conditioning)
+            if conditioning is not None and self.text_model is not None
             else None
         )
 

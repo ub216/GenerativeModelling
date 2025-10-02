@@ -1,7 +1,7 @@
-# train_diffusion.py
 import math
 
 import torch
+from loguru import logger
 
 from models.base_model import BaseModel
 from models.simple_unet import SimpleUNet
@@ -22,8 +22,8 @@ class DiffusionModel(BaseModel):
         device="cuda",
         test_timesteps=None,
         text_emb_dim=None,
-        text_mask=0.25,
-        cond_weight=10,
+        drop_condition_ratio=0.25,
+        sample_condition_weight=10,
     ):
         super().__init__()
         self.unet = SimpleUNet(
@@ -42,15 +42,21 @@ class DiffusionModel(BaseModel):
         self.train_schedule = prepare_noise_schedule(self.timesteps, device)
         self.test_schedule = prepare_noise_schedule(self.test_timesteps, device)
         self.text_emb_dim = text_emb_dim
-        self.text_mask = text_mask
-        self.cond_weight = cond_weight
+        self.drop_condition_ratio = drop_condition_ratio
+        self.sample_condition_weight = sample_condition_weight
         self.has_conditional_generation = True if text_emb_dim is not None else False
+        if self.has_conditional_generation:
+            logger.info("Created a conditioned diffusion model")
+        else:
+            logger.info("Created an unconditioned diffusion model")
 
-    def forward(self, x0, time_steps=None, noise=None, cond=None, *args, **kwargs):
+    def forward(
+        self, x0, time_steps=None, noise=None, conditioning=None, *args, **kwargs
+    ):
         """
         Predict the noise epsilon that was added to x0 to make x_t.
         """
-        if not self.valid_input_combination(cond):
+        if not self.valid_input_combination(conditioning):
             raise ValueError("Invalid input combination")
 
         if time_steps is None:
@@ -60,28 +66,43 @@ class DiffusionModel(BaseModel):
             )
         if noise is None:
             noise = torch.randn_like(x0)
+        if conditioning is not None:
+            # Randomly drop condition to train model for unconditioned input
+            conditioning = drop_condition(conditioning, self.drop_condition_ratio)
+
         x_noisy = self.q_sample(x0, time_steps, noise, self.train_schedule)
-
-        if cond is not None:
-            cond = drop_condition(cond, self.text_mask)
-
-        predicted_noise = self.unet(x_noisy, time_steps, cond=cond)
+        predicted_noise = self.unet(x_noisy, time_steps, conditioning=conditioning)
         return predicted_noise, noise
 
     def sample(
-        self, num_samples, device, img_size, batch_size=16, cond=None, *args, **kwargs
+        self,
+        num_samples,
+        device,
+        img_size,
+        batch_size=16,
+        conditioning=None,
+        *args,
+        **kwargs
     ):
-        assert cond is None or len(cond) == num_samples
-        if cond is None and self.has_conditional_generation:
-            cond = [""] * num_samples
-        return self.sample_ddpm(num_samples, device, img_size, batch_size, cond=cond)
+        assert conditioning is None or len(conditioning) == num_samples
+        if conditioning is None and self.has_conditional_generation:
+            conditioning = [""] * num_samples
+        return self.sample_ddpm(
+            num_samples, device, img_size, batch_size, conditioning=conditioning
+        )
 
     # -------------------------
     # Sampling (ancestral reverse diffusion)
     # -------------------------
     @torch.no_grad()
     def sample_ddpm(
-        self, num_samples, device, img_size, batch_size=16, channels=1, cond=None
+        self,
+        num_samples,
+        device,
+        img_size,
+        batch_size=16,
+        channels=1,
+        conditioning=None,
     ):
         """
         Generate samples by iteratively denoising from pure noise.
@@ -90,10 +111,10 @@ class DiffusionModel(BaseModel):
         img_size: int (assumes square images)
         batch_size: int
         channels: output channels (C)
-        cond: input conditioning
+        conditioning: input conditioning
         returns: (num_samples, C, H, W) tensor of generated images
         """
-        if not self.valid_input_combination(cond):
+        if not self.valid_input_combination(conditioning):
             raise ValueError("Invalid input combination")
         self.unet.eval()
         schedule = self.test_schedule
@@ -102,25 +123,33 @@ class DiffusionModel(BaseModel):
         for idx in range(math.ceil(num_samples / batch_size)):
             cur_bs = min(batch_size, num_samples - len(samples))
             x_t = torch.randn(cur_bs, channels, img_size, img_size, device=device)
-            cond_batch = (
-                cond[idx * batch_size : idx * batch_size + cur_bs]
-                if cond is not None
+            conditioning_batch = (
+                conditioning[idx * batch_size : idx * batch_size + cur_bs]
+                if conditioning is not None
                 else None
             )
 
             for t in reversed(range(T)):
-                time_batch = torch.full((cur_bs,), t, device=device, dtype=torch.long)
+                timestep_batch = torch.full(
+                    (cur_bs,), t, device=device, dtype=torch.long
+                )
 
                 # predict conditional and unconditional and combine (if conditioning)
-                if self.text_emb_dim is not None:
-                    eps_cond = self.unet(x_t, time_batch, cond=cond_batch)
+                if self.has_conditional_generation:
+                    eps_conditioning = self.unet(
+                        x_t, timestep_batch, conditioning=conditioning_batch
+                    )
                     # unconditional batch: empty string list if model expects strings
-                    uncond_batch = [""] * cur_bs
-                    eps_uncond = self.unet(x_t, time_batch, cond=uncond_batch)
+                    unconditioning_batch = [""] * cur_bs
+                    eps_unconditioning = self.unet(
+                        x_t, timestep_batch, conditioning=unconditioning_batch
+                    )
                     # guided epsilon: eps_uncond + scale * (eps_cond - eps_uncond)
-                    eps_theta = eps_uncond + self.cond_weight * (eps_cond - eps_uncond)
+                    eps_theta = eps_unconditioning + self.sample_condition_weight * (
+                        eps_conditioning - eps_unconditioning
+                    )
                 else:
-                    eps_theta = self.unet(x_t, time_batch, cond=None)
+                    eps_theta = self.unet(x_t, timestep_batch, conditioning=None)
 
                 beta_t = schedule["betas"][t]
                 alpha_t = schedule["alphas"][t]
@@ -158,12 +187,12 @@ class DiffusionModel(BaseModel):
         sqrt_1_a = schedule["sqrt_one_minus_alphas_cumprod"][t].view(-1, 1, 1, 1)
         return sqrt_a * x0 + sqrt_1_a * noise
 
-    def valid_input_combination(self, cond):
+    def valid_input_combination(self, conditioning):
         """
-        Check if cond exits iff model performs conditional generation
+        Check if conditioning exits iff model performs conditional generation
         """
-        return (self.has_conditional_generation and cond is not None) or (
-            cond is None and not self.has_conditional_generation
+        return (self.has_conditional_generation and conditioning is not None) or (
+            conditioning is None and not self.has_conditional_generation
         )
 
 

@@ -14,7 +14,7 @@ This repository provides a set of tools to quickly set up and experiment with ge
 - [x] Add support for diffusion network
 - [x] Add support for flow matching
 - [ ] Add support for GANs
-- [x] Add support for CFG in diffusion
+- [x] Add support for CFG in diffusion/flow
 - [ ] Update ResNet based UNet to X-former
 - [ ] Add some result comparison
 

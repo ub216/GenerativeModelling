@@ -4,8 +4,12 @@ import cv2
 import numpy as np
 
 
-def save_eval_results(samples, filename="generated_samples.png", cond=None):
-    """Save generated samples in a grid format with optional text overlay."""
+def save_eval_results(samples, filename="generated_samples.png", conditioning=None):
+    """
+    Save generated samples in a grid format with optional text overlay.
+    if conditioning is provided, it is overlayed on the corresponding input to the top-left corner.
+    if unconditioned then nothing is overlayed.
+    """
     assert len(samples.shape) == 4  # (N, C, H, W)
     num_samples = samples.size(0)
     grid_size = int(np.ceil(np.sqrt(num_samples)))
@@ -15,11 +19,11 @@ def save_eval_results(samples, filename="generated_samples.png", cond=None):
     grid_image = np.zeros(
         (grid_size * sample_height, grid_size * sample_width), dtype=np.uint8
     )
-    # normalize cond list length if provided
-    if cond is not None:
+    # normalize conditioning list length if provided
+    if conditioning is not None:
         assert (
-            len(cond) == num_samples
-        ), f"cond length {len(cond)} must match samples {num_samples}"
+            len(conditioning) == num_samples
+        ), f"conditioning length {len(conditioning)} must match samples {num_samples}"
 
     for idx in range(num_samples):
         row = idx // grid_size
@@ -27,9 +31,9 @@ def save_eval_results(samples, filename="generated_samples.png", cond=None):
         img = samples[idx].squeeze().cpu().numpy() * 255
         img = img.astype(np.uint8)
 
-        # overlay text if cond provided
-        if cond is not None and cond[idx] != "":
-            label = str(cond[idx])
+        # overlay text if conditioning provided
+        if conditioning is not None and conditioning[idx] != "":
+            label = str(conditioning[idx])
             # draw text directly on the image
             img_colored = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
             cv2.putText(
@@ -52,18 +56,18 @@ def save_eval_results(samples, filename="generated_samples.png", cond=None):
     cv2.imwrite(filename, grid_image)
 
 
-def drop_condition(cond, r):
+def drop_condition(conditioning, r):
     """
-    cond: Conditioning text
+    conditioning: Conditioning text
     r: percentage (0–1) of elements to replace with null condition ""
     """
     assert r < 1
-    N = len(cond)
+    N = len(conditioning)
     k = int(N * r)  # how many to blank out
     indices = random.sample(range(N), k)  # pick k random positions
 
     # copy list so original is not modified
-    drop_cond = cond[:]
+    drop_conditioning = conditioning[:]
     for i in indices:
-        drop_cond[i] = ""
-    return drop_cond
+        drop_conditioning[i] = ""
+    return drop_conditioning

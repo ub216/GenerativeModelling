@@ -2,14 +2,16 @@ experiment:
   name: "Generative"
 
 model:
-  type: "flow"            # options: vae, diffusion, flow, etc.
+  type: "flow"                       # options: vae, diffusion, flow, etc.
   params:
     timesteps: 1000
-    test_timesteps: 200
-  checkpoint: null  
+    test_timesteps: 200    
+    text_emb_dim: 128                # Set to null if CFG not required
+    sample_condition_weight: 10
+  checkpoint: null                   # Use for evaluation or restarting training
 
 optimizer:
-  type: "adam"           # could also be sgd, adamw, etc.
+  type: "adam"                       # could also be sgd, adamw, etc. (not yet added support)
   lr: 0.001
   weight_decay: 0.0
 
@@ -18,9 +20,12 @@ training:
   epochs: 50
   device: "cuda"
   metric_interval: 5
-    
+
+evaluation:                          # Only used for evaluation run
+  samples: 100
+
 dataset:
-  type: "mnist"       # options: mnist, imagenet, coco
+  type: "mnist"                      # options: mnist (imagenet, coco, .. in future)
   params:
     root: "/data/datasets/mnist/"
     num_workers: 8
@@ -28,7 +33,7 @@ dataset:
     persistent_workers: true
 
 loss:
-  type: "pair_mse"       # options: vae_loss, pair_mse
+  type: "pair_mse"                   # options: vae_loss, pair_mse
   params:
     reduction: "mean"
 
