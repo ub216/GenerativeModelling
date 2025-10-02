@@ -1,6 +1,9 @@
+from typing import List
+
 import torch
 import torch.nn as nn
 
+import helpers.custom_types as custom_types
 from models.base_model import BaseModel
 from models.residual_conv import ResidualConv, ResidualDeconv
 
@@ -11,13 +14,17 @@ from models.residual_conv import ResidualConv, ResidualDeconv
 class VAE(BaseModel):
     def __init__(
         self,
-        in_channels=1,
-        img_size=28,
-        feature_dims=[32, 64],
-        latent_dim=32,
-        hidden_dim=128,
-        dropout=0.5,
+        in_channels: int = 1,
+        img_size: int = 28,
+        feature_dims: List[int] = [32, 64],
+        latent_dim: int = 32,
+        hidden_dim: int = 128,
+        dropout: float = 0.5,
     ):
+        """
+        VAE can only handle square images for now
+        TODO: Relax constraint that images need to be square
+        """
         super().__init__()
 
         self.img_size = img_size
@@ -84,12 +91,14 @@ class VAE(BaseModel):
         self.decoder_conv = nn.Sequential(*dec_blocks)
 
     # ---------- Latent sampling ----------
-    def random_sample(self, z_mean, z_logvar):
+    def random_sample(
+        self, z_mean: torch.Tensor, z_logvar: torch.Tensor
+    ) -> torch.Tensor:
         eps = torch.randn_like(z_mean)
         return z_mean + torch.exp(0.5 * z_logvar) * eps
 
     # ---------- Forward ----------
-    def forward(self, x, *args, **kwargs):
+    def forward(self, x: torch.Tensor, *args, **kwargs):
         h = self.encoder_conv(x)
         h = self.encoder_fc(h)
 
@@ -103,7 +112,9 @@ class VAE(BaseModel):
 
         return out, z_mean, z_logvar
 
-    def sample(self, num_samples, device, *args, **kwargs):
+    def sample(
+        self, num_samples: int, device: custom_types.DeviceType, *args, **kwargs
+    ):
         z = torch.randn(num_samples, self.latent_dim).to(device)
         h_dec = self.decoder_fc(z)
         out = self.decoder_conv(h_dec)

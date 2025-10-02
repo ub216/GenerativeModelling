@@ -1,11 +1,13 @@
 import math
+from typing import Dict, List, Optional, Tuple
 
 import torch
 from loguru import logger
 
+import helpers.custom_types as custom_types
+from helpers.utils import drop_condition
 from models.base_model import BaseModel
 from models.simple_unet import SimpleUNet
-from utils import drop_condition
 
 
 # -----------------------------
@@ -14,16 +16,16 @@ from utils import drop_condition
 class DiffusionModel(BaseModel):
     def __init__(
         self,
-        in_channels=1,
-        base_channels=64,
-        channel_mults=(1, 2, 4),
-        time_emb_dim=128,
-        timesteps=1000,
-        device="cuda",
-        test_timesteps=None,
-        text_emb_dim=None,
-        drop_condition_ratio=0.25,
-        sample_condition_weight=10,
+        in_channels: int = 1,
+        base_channels: int = 64,
+        channel_mults: List[int] = [1, 2, 4],
+        time_emb_dim: int = 128,
+        timesteps: int = 1000,
+        device: custom_types.DeviceType = "cuda",
+        test_timesteps: Optional[int] = None,
+        text_emb_dim: Optional[int] = None,
+        drop_condition_ratio: float = 0.25,
+        sample_condition_weight: int = 10,
     ):
         super().__init__()
         self.unet = SimpleUNet(
@@ -51,8 +53,14 @@ class DiffusionModel(BaseModel):
             logger.info("Created an unconditioned diffusion model")
 
     def forward(
-        self, x0, time_steps=None, noise=None, conditioning=None, *args, **kwargs
-    ):
+        self,
+        x0: torch.Tensor,
+        time_steps: Optional[torch.Tensor] = None,
+        noise: Optional[torch.Tensor] = None,
+        conditioning: Optional[List[str]] = None,
+        *args,
+        **kwargs
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Predict the noise epsilon that was added to x0 to make x_t.
         """
@@ -76,14 +84,14 @@ class DiffusionModel(BaseModel):
 
     def sample(
         self,
-        num_samples,
-        device,
-        img_size,
-        batch_size=16,
-        conditioning=None,
+        num_samples: int,
+        device: custom_types.DeviceType,
+        img_size: int,
+        batch_size: int = 16,
+        conditioning: Optional[List[str]] = None,
         *args,
         **kwargs
-    ):
+    ) -> torch.Tensor:
         assert conditioning is None or len(conditioning) == num_samples
         if conditioning is None and self.has_conditional_generation:
             conditioning = [""] * num_samples
@@ -97,13 +105,13 @@ class DiffusionModel(BaseModel):
     @torch.no_grad()
     def sample_ddpm(
         self,
-        num_samples,
-        device,
-        img_size,
-        batch_size=16,
-        channels=1,
-        conditioning=None,
-    ):
+        num_samples: int,
+        device: custom_types.DeviceType,
+        img_size: int,
+        batch_size: int = 16,
+        channels: int = 1,
+        conditioning: Optional[List[str]] = None,
+    ) -> torch.Tensor:
         """
         Generate samples by iteratively denoising from pure noise.
         num_samples: int
@@ -174,7 +182,13 @@ class DiffusionModel(BaseModel):
     # -------------------------
     # Forward diffusion q(x_t | x_0)
     # -------------------------
-    def q_sample(self, x0, t, noise, schedule):
+    def q_sample(
+        self,
+        x0: torch.Tensor,
+        t: torch.Tensor,
+        noise: torch.Tensor,
+        schedule: Dict[str, torch.Tensor],
+    ) -> torch.Tensor:
         """
         x0: (B,C,H,W)
         t: (B,) long with values in [0..T-1]
@@ -187,7 +201,7 @@ class DiffusionModel(BaseModel):
         sqrt_1_a = schedule["sqrt_one_minus_alphas_cumprod"][t].view(-1, 1, 1, 1)
         return sqrt_a * x0 + sqrt_1_a * noise
 
-    def valid_input_combination(self, conditioning):
+    def valid_input_combination(self, conditioning: Optional[List[str]]) -> bool:
         """
         Check if conditioning exits iff model performs conditional generation
         """
@@ -199,7 +213,9 @@ class DiffusionModel(BaseModel):
 # -------------------------
 # Noise schedule helpers (linear Beta schedule)
 # -------------------------
-def linear_beta_schedule(timesteps, beta_start=1e-4, beta_end=2e-2):
+def linear_beta_schedule(
+    timesteps: int, beta_start: float = 1e-4, beta_end: float = 2e-2
+) -> torch.Tensor:
     """
     Linear schedule from beta_start to beta_end
     timesteps: int
@@ -208,7 +224,9 @@ def linear_beta_schedule(timesteps, beta_start=1e-4, beta_end=2e-2):
     return torch.linspace(beta_start, beta_end, timesteps)
 
 
-def prepare_noise_schedule(num_timesteps, device):
+def prepare_noise_schedule(
+    num_timesteps: int, device: custom_types.DeviceType
+) -> Dict[str, torch.Tensor]:
     """
     Prepare noise schedule tensors for diffusion process.
     num_timesteps: int

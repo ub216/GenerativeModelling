@@ -2,20 +2,29 @@ import argparse
 import os
 import shutil
 import time
+from typing import List, Optional
 
 import torch
 import yaml
 from loguru import logger
 
+import helpers.custom_types as custom_types
 import metrics
-from factory import get_dataset, get_metrics, get_model
-from utils import drop_condition, save_eval_results
+from helpers.factory import get_dataset, get_metrics, get_model
+from helpers.utils import drop_condition, save_eval_results
 
 
 # -----------------------------
 # Evaluation loop
 # -----------------------------
-def eval_sample(model, num_samples, device, img_size, save_dir="./", dataloader=None):
+def eval_sample(
+    model: custom_types.GenBaseModel,
+    num_samples: int,
+    device: custom_types.DeviceType,
+    img_size: int,
+    save_dir: str = "./",
+    dataloader=None,
+) -> torch.Tensor:
     model.eval()
     with torch.no_grad():
         if dataloader is not None and model.has_conditional_generation:
@@ -47,7 +56,14 @@ def eval_sample(model, num_samples, device, img_size, save_dir="./", dataloader=
     return samples
 
 
-def eval(model, dataloader, compute_metrics, device, save_dir="./", n_samples=100):
+def eval(
+    model: custom_types.GenBaseModel,
+    dataloader: torch.utils.data.DataLoader,
+    compute_metrics: List[torch.nn.Module],
+    device: custom_types.DeviceType,
+    save_dir: str = "./",
+    n_samples: int = 100,
+):
     # Generate evaluation samples
     eval_sample(
         model,
@@ -72,7 +88,7 @@ def eval(model, dataloader, compute_metrics, device, save_dir="./", n_samples=10
 # -----------------------------
 # Main
 # -----------------------------
-def main(config_path="config.yaml"):
+def main(config_path: str = "config.yaml"):
     parser = argparse.ArgumentParser(description="Evaluate generative model")
     parser.add_argument("--config", type=str, required=True, help="Config file path")
     args = parser.parse_args()
@@ -90,8 +106,12 @@ def main(config_path="config.yaml"):
     os.makedirs(run_dir, exist_ok=True)
     shutil.copy(config_path, f"{run_dir}/config.yaml")
 
-    # Setup model
-    model = get_model(cfg["model"])
+    # Setup Dataloader
+    dataloader = get_dataset(cfg["dataset"], cfg["training"].get("batch_size", None))
+
+    # Setup model after dataloader to estimate image_size and
+    # channel dimension. This is required to initiate models
+    model = get_model(cfg["model"], dataloader)
     if cfg["model"].get("checkpoint", None) is not None:
         ckpt = cfg["model"]["checkpoint"]
         checkpoint = torch.load(ckpt, map_location=cfg["training"]["device"])
@@ -100,8 +120,6 @@ def main(config_path="config.yaml"):
     else:
         logger.warning("No checkpoint provided, testing on random weights!")
     model = model.to(cfg["training"]["device"])
-    # Setup Dataloader
-    dataloader = get_dataset(cfg["dataset"], cfg["training"].get("batch_size", None))
 
     # Metrics
     compute_metrics = get_metrics(cfg["metrics"])

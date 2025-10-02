@@ -1,10 +1,16 @@
 import random
+from typing import List, Optional
 
 import cv2
 import numpy as np
+import torch
 
 
-def save_eval_results(samples, filename="generated_samples.png", conditioning=None):
+def save_eval_results(
+    samples: torch.Tensor,
+    filename: str = "generated_samples.png",
+    conditioning: Optional[List[str]] = None,
+):
     """
     Save generated samples in a grid format with optional text overlay.
     if conditioning is provided, it is overlayed on the corresponding input to the top-left corner.
@@ -56,7 +62,7 @@ def save_eval_results(samples, filename="generated_samples.png", conditioning=No
     cv2.imwrite(filename, grid_image)
 
 
-def drop_condition(conditioning, r):
+def drop_condition(conditioning: List[str], r: float) -> List[str]:
     """
     conditioning: Conditioning text
     r: percentage (0–1) of elements to replace with null condition ""

@@ -2,6 +2,7 @@ import argparse
 import os
 import shutil
 import time
+from typing import List, Optional
 
 import torch
 import yaml
@@ -9,18 +10,25 @@ from loguru import logger
 from torch.amp import GradScaler, autocast
 from tqdm import tqdm
 
+import helpers.custom_types as custom_types
 import metrics
 import wandb
-from factory import get_dataset, get_loss_function, get_metrics, get_model
-from utils import drop_condition, save_eval_results
+from helpers.factory import get_dataset, get_loss_function, get_metrics, get_model
+from helpers.utils import drop_condition, save_eval_results
 
 
 # -----------------------------
 # Training one epoch
 # -----------------------------
 def train_one_epoch(
-    model, dataloader, optimizer, criterion, device, epoch=0, scaler=None
-):
+    model: custom_types.GenBaseModel,
+    dataloader: torch.utils.data.DataLoader,
+    optimizer: torch.optim.Optimizer,
+    criterion: torch.nn.Module,
+    device: custom_types.DeviceType,
+    epoch: int = 0,
+    scaler: Optional[GradScaler] = None,
+) -> torch.Tensor:
     model.train()
     total_loss = 0
     pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}", leave=False)
@@ -61,8 +69,14 @@ def train_one_epoch(
 # Evaluation (sampling)
 # -----------------------------
 def eval_sample(
-    model, num_samples, device, img_size, step=0, save_dir="./", dataloader=None
-):
+    model: custom_types.GenBaseModel,
+    num_samples: int,
+    device: custom_types.DeviceType,
+    img_size: int,
+    step: int = 0,
+    save_dir: str = "./",
+    dataloader: Optional[torch.utils.data.DataLoader] = None,
+) -> torch.Tensor:
     model.eval()
     conditioning = None
     with torch.no_grad():
@@ -104,16 +118,16 @@ def eval_sample(
 # Training loop
 # -----------------------------
 def train(
-    model,
-    dataloader,
-    optimizer,
-    criterion,
-    compute_metrics,
-    device,
-    epochs=10,
-    start_epoch=0,
-    metric_interval=1,
-    save_dir="./",
+    model: custom_types.GenBaseModel,
+    dataloader: torch.utils.data.DataLoader,
+    optimizer: torch.optim.Optimizer,
+    criterion: torch.nn.Module,
+    compute_metrics: List[torch.nn.Module],
+    device: custom_types.DeviceType,
+    epochs: int = 10,
+    start_epoch: int = 0,
+    metric_interval: int = 1,
+    save_dir: str = "./",
 ):
     model.to(device)
     scaler = GradScaler()  # AMP gradient scaler
@@ -167,7 +181,7 @@ def train(
 # -----------------------------
 # Main
 # -----------------------------
-def main(config_path="config.yaml"):
+def main(config_path: str = "config.yaml"):
     parser = argparse.ArgumentParser(description="Train generative model")
     parser.add_argument("--config", type=str, required=True, help="Config file path")
     args = parser.parse_args()
@@ -194,15 +208,15 @@ def main(config_path="config.yaml"):
     os.makedirs(run_dir, exist_ok=True)
     shutil.copy(config_path, f"./runs/{run_name}/config.yaml")
 
-    # Setup model
-    model = get_model(cfg["model"])
-
-    # Setup loss
-    criterion = get_loss_function(cfg["loss"])
-
     # Setup Dataloader
     dataloader = get_dataset(cfg["dataset"], cfg["training"].get("batch_size", None))
 
+    # Setup model after dataloader to estimate image_size and
+    # channel dimension. This is required to initiate models
+    model = get_model(cfg["model"], dataloader)
+
+    # Setup loss
+    criterion = get_loss_function(cfg["loss"])
     # Setup Optimizer
     if cfg["optimizer"]["type"].lower() == "adam":
         optimizer = torch.optim.Adam(model.parameters(), lr=cfg["optimizer"]["lr"])

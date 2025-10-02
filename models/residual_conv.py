@@ -1,3 +1,5 @@
+from typing import Optional
+
 import torch
 from loguru import logger
 from torch import nn
@@ -10,14 +12,16 @@ class ResidualConv(nn.Module):
 
     def __init__(
         self,
-        in_channels,
-        out_channels,
-        stride=1,
-        dropout=0.0,
-        norm=True,
-        time_emb_dim=None,
-        text_emb_dim=None,
-        bias=True,
+        in_channels: int,
+        out_channels: int,
+        stride: int = 1,
+        dropout: float = 0.0,
+        norm: bool = True,
+        time_emb_dim: Optional[int] = None,
+        text_emb_dim: Optional[int] = None,
+        bias: bool = True,
+        activation: nn.Module = nn.SiLU(),
+        spectral_norm=False,
     ):
         super().__init__()
         self.time_emb_dim = time_emb_dim
@@ -29,11 +33,15 @@ class ResidualConv(nn.Module):
             padding=1,
             bias=bias,
         )
-        self.act = nn.SiLU()
+
+        self.act = activation
         self.dropout = nn.Dropout2d(dropout)
         self.conv2 = nn.Conv2d(
             out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=bias
         )
+        if spectral_norm:
+            self.conv1 = nn.utils.spectral_norm(self.conv1)
+            self.conv2 = nn.utils.spectral_norm(self.conv2)
 
         self.norm1 = self.norm2 = None
         if norm:
@@ -71,7 +79,12 @@ class ResidualConv(nn.Module):
                 in_channels, out_channels, kernel_size=1, stride=stride, bias=bias
             )
 
-    def forward(self, x, time_emb=None, text_emb=None):
+    def forward(
+        self,
+        x: torch.Tensor,
+        time_emb: Optional[torch.Tensor] = None,
+        text_emb: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         identity = self.skip(x)
         out = self.conv1(x)
         out = self.norm1(out) if self.norm1 is not None else out
@@ -102,13 +115,14 @@ class ResidualConv(nn.Module):
 class ResidualDeconv(nn.Module):
     def __init__(
         self,
-        in_channels,
-        out_channels,
-        stride=2,
-        dropout=0.0,
-        norm=True,
-        bias=True,
-        final_layer=False,
+        in_channels: int,
+        out_channels: int,
+        stride: int = 2,
+        dropout: float = 0.0,
+        norm: bool = True,
+        bias: bool = True,
+        final_layer: bool = False,
+        activation: nn.modules = nn.SiLU(),
     ):
         super().__init__()
         self.deconv1 = nn.ConvTranspose2d(
@@ -120,7 +134,7 @@ class ResidualDeconv(nn.Module):
             output_padding=1,
             bias=bias,
         )
-        self.act = nn.SiLU()
+        self.act = activation
         self.dropout = nn.Dropout2d(dropout)
         self.deconv2 = nn.ConvTranspose2d(
             out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=bias

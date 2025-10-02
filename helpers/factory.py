@@ -1,12 +1,16 @@
+from typing import Any, Dict, List
+
+import torch
 from loguru import logger
 
+import helpers.custom_types as custom_types
 import loaders
 import losses
 import metrics
 import models
 
 
-def get_dataset(cfg, batch_size=None):
+def get_dataset(cfg: Dict[str, Any], batch_size=None) -> torch.utils.data.DataLoader:
     name = cfg["type"].lower()
     params = cfg.get("params", {})
     logger.info(f"Dataset params: {params}")
@@ -28,7 +32,7 @@ def get_dataset(cfg, batch_size=None):
         raise ValueError(f"Unknown dataset: {name}")
 
 
-def get_loss_function(cfg):
+def get_loss_function(cfg: Dict[str, Any]) -> torch.nn.Module:
     name = cfg["type"].lower()
     params = cfg.get("params", {})
     logger.info(f"Loss params: {params}")
@@ -40,11 +44,32 @@ def get_loss_function(cfg):
         raise ValueError(f"Unknown loss function: {name}")
 
 
-def get_model(cfg):
+def get_model(
+    cfg: Dict[str, Any], dataloader: torch.utils.data.DataLoader
+) -> custom_types.GenBaseModel:
+    example_imgs, _ = next(iter(dataloader))
+    _, c, h, w = example_imgs.shape
     name = cfg["type"].lower()
     params = cfg.get("params", {})
+
+    # Compare image_size given in cfg and loaded from dataloader
+    # We only consdier square images
+    if params.get("image_size", None) is not None and params["image_size"] != h:
+        logger.warning(
+            f"Overriding model image_size to {h} similar to the input recived from Dataloader"
+        )
+    params["image_size"] = h
+
+    # Compare in_channels given in cfg and loaded from dataloader
+    if params.get("in_channels", None) is not None and params["in_channels"] != c:
+        logger.warning(
+            f"Overriding model in_channels to {c} similar to the input recived from Dataloader"
+        )
+    params["in_channels"] = c
+
     logger.info(f"Model params: {params}")
     if name == "vae":
+        assert h == w, f"VAE implementation can only handle square images for now"
         return models.VAE(**params)
     elif name == "diffusion":
         return models.DiffusionModel(**params)
@@ -54,7 +79,7 @@ def get_model(cfg):
         raise ValueError(f"Unknown model type: {name}")
 
 
-def get_metrics(cfg):
+def get_metrics(cfg: Dict[str, Any]) -> List[torch.nn.Module]:
     metric = []
     if cfg is None:
         return metric

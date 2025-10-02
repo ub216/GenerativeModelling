@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -6,9 +8,11 @@ from scipy import linalg
 from torchvision.models import inception_v3
 from tqdm import tqdm
 
+import helpers.custom_types as custom_types
+
 
 class FIDInception(nn.Module):
-    def __init__(self, samples, device="cuda"):
+    def __init__(self, samples: int, device: custom_types.DeviceType = "cuda"):
         super().__init__()
         self.device = device
         self.inception = inception_v3(pretrained=True, transform_input=False)
@@ -16,7 +20,7 @@ class FIDInception(nn.Module):
         self.inception.eval().to(device)
         self.samples = samples
 
-    def get_features(self, x):
+    def get_features(self, x: torch.Tensor) -> torch.Tensor:
         if x.size(1) != 3:
             x = x.repeat(1, 3, 1, 1)
         x = F.interpolate(x, size=(299, 299), mode="bilinear", align_corners=False)
@@ -27,7 +31,11 @@ class FIDInception(nn.Module):
             feats = self.inception(x)
         return feats
 
-    def get_dataloader_statistics(self, dataloader, desc="Calculating statistics"):
+    def get_dataloader_statistics(
+        self,
+        dataloader: torch.utils.data.DataLoader,
+        desc: str = "Calculating statistics",
+    ) -> tuple[np.ndarray, np.ndarray]:
         """Accumulate mean and covariance batch by batch from dataloader."""
         feats = []
         with torch.no_grad():
@@ -50,7 +58,9 @@ class FIDInception(nn.Module):
         mu, sigma = self.calculate_statistics(feats)
         return mu, sigma
 
-    def calculate_fid(self, mu1, sigma1, mu2, sigma2):
+    def calculate_fid(
+        self, mu1: np.ndarray, sigma1: np.ndarray, mu2: np.ndarray, sigma2: np.ndarray
+    ) -> float:
         if isinstance(mu1, np.ndarray):
             diff = mu1 - mu2
             covmean, _ = linalg.sqrtm(sigma1.dot(sigma2), disp=False)
@@ -58,13 +68,14 @@ class FIDInception(nn.Module):
                 covmean = covmean.real
             fid = diff.dot(diff) + np.trace(sigma1 + sigma2 - 2 * covmean)
         else:
-            diff = mu1 - mu2
-            covmean = self.matrix_sqrt(sigma1 @ sigma2)
-            fid = diff.dot(diff) + torch.trace(sigma1 + sigma2 - 2 * covmean)
-            fid = fid.item()
+            raise TypeError(f"Incorrect format of mean and covriances to compute fid")
         return float(fid)
 
-    def forward(self, real_loader, gen_loader):
+    def forward(
+        self,
+        real_loader: torch.utils.data.DataLoader,
+        gen_loader: torch.utils.data.DataLoader,
+    ) -> float:
         """Accumulate mean and covariance batch by batch from dataloader."""
         assert isinstance(
             real_loader, torch.utils.data.DataLoader
@@ -82,18 +93,10 @@ class FIDInception(nn.Module):
         fid = self.calculate_fid(mu_real, sigma_real, mu_gen, sigma_gen)
         return fid
 
-    def calculate_statistics(self, feats):
+    def calculate_statistics(self, feats: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         if isinstance(feats, np.ndarray):
             mu = np.mean(feats, axis=0)
             sigma = np.cov(feats, rowvar=False)
         else:
-            mu = feats.mean(dim=0)
-            sigma = torch.cov(feats.T)
+            raise TypeError(f"Incorrect format of mean and covriances to compute fid")
         return mu, sigma
-
-    def matrix_sqrt(self, mat, eps=1e-6):
-        # Eigen-decomposition
-        vals, vecs = torch.linalg.eigh(mat)
-        vals = torch.clamp(vals, min=eps)
-        sqrt_vals = torch.sqrt(vals)
-        return (vecs * sqrt_vals.unsqueeze(0)) @ vecs.T

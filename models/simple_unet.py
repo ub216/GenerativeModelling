@@ -1,7 +1,10 @@
+from typing import List, Optional
+
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+import helpers.custom_types as custom_types
 from models.residual_conv import ResidualConv
 from models.text_model import TextModel
 from models.utils import sinusoidal_embedding
@@ -18,12 +21,12 @@ class SimpleUNet(nn.Module):
 
     def __init__(
         self,
-        in_channels=1,
-        base_channels=64,
-        channel_mults=(1, 2, 4),
-        time_emb_dim=128,
-        text_emb_dim=None,
-        device="cuda",
+        in_channels: int = 1,
+        base_channels: int = 64,
+        channel_mults: List[int] = [1, 2, 4],
+        time_emb_dim: int = 128,
+        text_emb_dim: Optional[int] = None,
+        device: custom_types.DeviceType = "cuda",
     ):
         super().__init__()
         self.in_conv = nn.Conv2d(in_channels, base_channels, 3, padding=1)
@@ -85,11 +88,17 @@ class SimpleUNet(nn.Module):
             ch, in_channels, kernel_size=3, padding=1
         )  # predict noise
 
-    def forward(self, x, timesteps, conditioning=None):
+    def forward(
+        self,
+        x: torch.Tensor,
+        timesteps: torch.Tensor,
+        conditioning: Optional[List[str]] = None,
+    ) -> torch.Tensor:
         """
         x: (B, C, H, W) noisy image
         timesteps: (B,) long
-        returns: predicted noise (same shape as x)
+        conditioning: (B,)
+        return: (B, C, H, W)
         """
         time_emb = sinusoidal_embedding(timesteps, self.time_mlp[0].in_features)
         time_emb = self.time_mlp(time_emb)

@@ -1,19 +1,37 @@
+from typing import Tuple
+
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
+import helpers.custom_types as custom_types
 
-class VAELoss:
-    def __init__(self, recon_loss_weight=1.0, kl_div_weight=1.0, reduction="sum"):
+
+class VAELoss(nn.Module):
+    def __init__(
+        self,
+        recon_loss_weight: float = 1.0,
+        kl_div_weight: float = 1.0,
+        reduction: custom_types.ReductionType = "sum",
+    ):
         assert reduction in [
             "sum",
             "mean",
-            "none",
-        ], "Reduction must be 'sum', 'mean', or 'none'"
+        ], "Reduction must be 'sum' or 'mean'"
         self.recon_loss_weight = recon_loss_weight
         self.kl_div_weight = kl_div_weight
         self.reduction = reduction
 
-    def __call__(self, outputs, inputs):
+    def forward(
+        self,
+        outputs: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
+        inputs: torch.Tensor,
+        *args,
+        **kwargs
+    ) -> torch.Tensor:
+        """
+        Computes the VAE loss = KLdivergence + L2 reconstructing error
+        """
         assert (
             isinstance(outputs, tuple) and len(outputs) == 3
         ), "Outputs must be a tuple of (output, z_logvar, z_mean)"

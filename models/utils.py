@@ -1,16 +1,13 @@
 import math
-import random
 
 import torch
 import torch.nn.functional as F
-from transformers import (AutoModel, AutoProcessor, AutoTokenizer,
-                          CLIPTextModelWithProjection)
 
 
 # -------------------------
 # Utilities: timestep embedding
 # -------------------------
-def sinusoidal_embedding(timesteps, dim):
+def sinusoidal_embedding(timesteps: torch.Tensor, dim: int):
     """
     Create sinusoidal timestep embeddings (like Transformer / diffusion papers).
     timesteps: (B,) long tensor

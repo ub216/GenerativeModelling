@@ -1,16 +1,23 @@
+from typing import Tuple
+
+import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
+import helpers.custom_types as custom_types
 
-class PairMSELoss:
-    def __init__(self, reduction="mean"):
+
+class PairMSELoss(nn.Module):
+    def __init__(self, reduction: custom_types.ReductionType = "mean"):
         assert reduction in [
             "sum",
             "mean",
-            "none",
-        ], "Reduction must be 'sum', 'mean', or 'none'"
+        ], "Reduction must be 'sum' or 'mean'"
         self.reduction = reduction
 
-    def __call__(self, outputs, *args, **kwargs):
+    def forward(
+        self, outputs: Tuple[torch.Tensor, torch.Tensor], *args, **kwargs
+    ) -> torch.Tensor:
         assert (
             len(outputs) == 2 and outputs[0].shape == outputs[1].shape
         ), "Outputs and inputs must have the same shape"

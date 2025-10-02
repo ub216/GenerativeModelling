@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
 
+import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
+import helpers.custom_types as custom_types
 from loaders import GeneratedDataset
 
 
@@ -17,7 +19,9 @@ class BaseModel(ABC, nn.Module):
         self.has_conditional_generation = False
 
     @abstractmethod
-    def sample(self, num_samples, device, *args, **kwargs):
+    def sample(
+        self, num_samples: int, device: custom_types.DeviceType, *args, **kwargs
+    ) -> torch.Tensor:
         """
         Generate samples from the model.
         Args:
@@ -29,7 +33,13 @@ class BaseModel(ABC, nn.Module):
         """
         pass
 
-    def wrap_sampler_to_loader(self, num_samples, device, img_size, batch_size=16):
+    def wrap_sampler_to_loader(
+        self,
+        num_samples: int,
+        device: custom_types.DeviceType,
+        img_size: int,
+        batch_size: int = 16,
+    ) -> DataLoader:
         """
         Wrap the model's sampling method into a DataLoader for evaluation.
         Args:

@@ -1,11 +1,13 @@
 import math
+from typing import List, Optional, Tuple
 
 import torch
 from loguru import logger
 
+import helpers.custom_types as custom_types
+from helpers.utils import drop_condition
 from models.base_model import BaseModel
 from models.simple_unet import SimpleUNet
-from utils import drop_condition
 
 
 # -----------------------------
@@ -14,16 +16,16 @@ from utils import drop_condition
 class FlowModel(BaseModel):
     def __init__(
         self,
-        in_channels=1,
-        base_channels=64,
-        channel_mults=(1, 2, 4),
-        time_emb_dim=128,
-        timesteps=1000,
-        device="cuda",
-        test_timesteps=None,
-        text_emb_dim=None,
-        drop_condition_ratio=0.25,
-        sample_condition_weight=10,
+        in_channels: int = 1,
+        base_channels: int = 64,
+        channel_mults: List[int] = (1, 2, 4),
+        time_emb_dim: int = 128,
+        timesteps: int = 1000,
+        device: custom_types.DeviceType = "cuda",
+        test_timesteps: Optional[int] = None,
+        text_emb_dim: Optional[int] = None,
+        drop_condition_ratio: float = 0.25,
+        sample_condition_weight: int = 10,
     ):
         super().__init__()
         self.unet = SimpleUNet(
@@ -49,7 +51,15 @@ class FlowModel(BaseModel):
         else:
             logger.info("Created an unconditioned flow matching model")
 
-    def forward(self, x0, time_steps=None, x1=None, conditioning=None, *args, **kwargs):
+    def forward(
+        self,
+        x0: torch.Tensor,
+        time_steps: Optional[torch.Tensor] = None,
+        x1: Optional[torch.Tensor] = None,
+        conditioning: Optional[List[str]] = None,
+        *args,
+        **kwargs
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         if not self.valid_input_combination(conditioning):
             raise ValueError("Invalid input combination")
         if time_steps is None:
@@ -68,14 +78,14 @@ class FlowModel(BaseModel):
 
     def sample(
         self,
-        num_samples,
-        device,
-        img_size,
-        batch_size=16,
-        conditioning=None,
+        num_samples: int,
+        device: custom_types.DeviceType,
+        img_size: int,
+        batch_size: int = 16,
+        conditioning: Optional[List[str]] = None,
         *args,
         **kwargs
-    ):
+    ) -> torch.Tensor:
         assert conditioning is None or len(conditioning) == num_samples
         if conditioning is None and self.has_conditional_generation:
             conditioning = [""] * num_samples
@@ -86,12 +96,12 @@ class FlowModel(BaseModel):
     @torch.no_grad()
     def sample_flow(
         self,
-        num_samples,
-        device,
-        img_size,
-        batch_size=16,
-        channels=1,
-        conditioning=None,
+        num_samples: int,
+        device: custom_types.DeviceType,
+        img_size: int,
+        batch_size: int = 16,
+        channels: int = 1,
+        conditioning: Optional[List[str]] = None,
     ):
         """
         Generate samples by iteratively predicting the flow.
@@ -142,7 +152,9 @@ class FlowModel(BaseModel):
         self.unet.train()
         return samples.clamp(0.0, 1.0)  # adjust if dataset is [-1,1]
 
-    def q_sample(self, x0, t, x1):
+    def q_sample(
+        self, x0: torch.Tensor, t: torch.Tensor, x1: torch.Tensor
+    ) -> torch.Tensor:
         """
         x0: (B,C,H,W)
         t: (B,) float in [0,1]
@@ -151,7 +163,7 @@ class FlowModel(BaseModel):
         """
         return (1 - t.view(-1, 1, 1, 1)) * x0 + t.view(-1, 1, 1, 1) * x1
 
-    def valid_input_combination(self, conditioning):
+    def valid_input_combination(self, conditioning: Optional[List[str]]) -> bool:
         """
         Check if conditioning exits iff model performs conditional generation
         """
