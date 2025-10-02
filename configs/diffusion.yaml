@@ -5,8 +5,10 @@ model:
   type: "diffusion"            # options: vae, diffusion, flow, etc.
   params:
     timesteps: 1000
-    test_timesteps: 200
-  checkpoint: null  
+    test_timesteps: 1000
+    text_emb_dim: 128         # Set to null if CFG not required
+    cond_weight: 10
+  checkpoint: null
 
 optimizer:
   type: "adam"           # could also be sgd, adamw, etc.
@@ -17,7 +19,10 @@ training:
   batch_size: 64
   epochs: 50
   device: "cuda"
-  metric_interval: 10 
+  metric_interval: 5
+
+evaluation:
+  samples: 100
     
 dataset:
   type: "mnist"       # options: mnist, imagenet, coco

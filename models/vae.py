@@ -89,7 +89,7 @@ class VAE(BaseModel):
         return z_mean + torch.exp(0.5 * z_logvar) * eps
 
     # ---------- Forward ----------
-    def forward(self, x):
+    def forward(self, x, *args, **kwargs):
         h = self.encoder_conv(x)
         h = self.encoder_fc(h)
 

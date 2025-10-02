@@ -48,12 +48,16 @@ def get_model(cfg):
         return models.VAE(**params)
     elif name == "diffusion":
         return models.DiffusionModel(**params)
+    elif name == "flow":
+        return models.FlowModel(**params)
     else:
         raise ValueError(f"Unknown model type: {name}")
 
 
 def get_metrics(cfg):
     metric = []
+    if cfg is None:
+        return metric
     for name, key in cfg.items():
         name = name.lower()
         params = key.get("params", {})

@@ -1,7 +1,14 @@
 import math
+import random
 
 import torch
 import torch.nn.functional as F
+from transformers import (
+    AutoModel,
+    AutoProcessor,
+    AutoTokenizer,
+    CLIPTextModelWithProjection,
+)
 
 
 # -------------------------

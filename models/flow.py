@@ -20,6 +20,7 @@ class FlowModel(BaseModel):
         device="cuda",
         test_timesteps=None,
     ):
+        super().__init__()
         self.unet = SimpleUNet(in_channels, base_channels, channel_mults, time_emb_dim)
         self.device = device
         self.timesteps = timesteps
@@ -28,7 +29,7 @@ class FlowModel(BaseModel):
         )
         self.test_delta = 1 / self.test_timesteps
 
-    def forward(self, x0, t=None, x1=None):
+    def forward(self, x0, t=None, x1=None, *args, **kwargs):
         if t is None:
             b = x0.shape[0]
             t = torch.rand(b, device=self.device)
@@ -40,7 +41,9 @@ class FlowModel(BaseModel):
         return pred_flow, flow
 
     @torch.no_grad()
-    def sample(self, num_samples, device, img_size, batch_size=16, channels=1):
+    def sample(
+        self, num_samples, device, img_size, batch_size=16, channels=1, *args, **kwargs
+    ):
         self.unet.eval()
         samples = []
         for _ in range(math.ceil(num_samples / batch_size)):

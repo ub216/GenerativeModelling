@@ -17,7 +17,7 @@ training:
   batch_size: 64
   epochs: 50
   device: "cuda"
-  metric_interval: 10 
+  metric_interval: 5
     
 dataset:
   type: "mnist"       # options: mnist, imagenet, coco
@@ -28,7 +28,7 @@ dataset:
     persistent_workers: true
 
 loss:
-  type: "pair_mse"       # options:
+  type: "pair_mse"       # options: vae_loss, pair_mse
   params:
     reduction: "mean"
 

@@ -12,6 +12,10 @@ class BaseModel(ABC, nn.Module):
     and implement the sample method.
     """
 
+    def __init__(self):
+        super().__init__()
+        self.has_conditional_generation = False
+
     @abstractmethod
     def sample(self, num_samples, device, *args, **kwargs):
         """

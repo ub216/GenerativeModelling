@@ -17,7 +17,7 @@ class MNISTDataset(MNIST):
 
     def __getitem__(self, index):
         img, target = super(MNISTDataset, self).__getitem__(index)
-        return img, target
+        return img, str(target)
 
 
 def get_mnist_dataloader(

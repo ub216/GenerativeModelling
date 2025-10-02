@@ -6,3 +6,4 @@ wandb
 scipy
 opencv-python
 loguru
+transformers
