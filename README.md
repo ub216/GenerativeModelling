@@ -74,6 +74,7 @@ python eval.py --config configs/diffusion.yaml
 - [`losses/`](losses/): Loss functions for training.
 - [`metrics/`](metrics/): Evaluation metrics.
 - [`loaders/`](loaders/): Dataset loaders.
+- [`helpers/`](helpers/): factory functions and classes.
 - [`utils.py`](utils.py): Utility functions.
 
 ## Contributing

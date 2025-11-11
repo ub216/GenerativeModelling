@@ -6,14 +6,16 @@ model:
   params:
     timesteps: 1000
     test_timesteps: 200
-    text_emb_dim: 128                   # Set to null if CFG not required
+    text_emb_dim: null                   # Set to null if CFG not required
     sample_condition_weight: 10
   checkpoint: null                      # Use for evaluation or restarting training
 
-optimizer:
-  type: "adam"                          # could also be sgd, adamw, etc. (not yet added support)
-  lr: 0.001
-  weight_decay: 0.0
+optimizer:                              
+  type: "adam"                          
+  params:
+    lr: 0.001
+    weight_decay: 0.0
+  accumulate_steps: 1                   # Number of steps to accumulate gradients over  
 
 training:
   batch_size: 64
@@ -41,4 +43,4 @@ metrics:
   fid:
     type: "fid_inception"
     params: 
-      samples: 16000
+      samples: 8000

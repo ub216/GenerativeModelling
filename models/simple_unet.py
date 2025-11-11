@@ -93,19 +93,26 @@ class SimpleUNet(nn.Module):
         x: torch.Tensor,
         timesteps: torch.Tensor,
         conditioning: Optional[List[str]] = None,
+        text_emb: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         x: (B, C, H, W) noisy image
         timesteps: (B,) long
         conditioning: (B,)
+        text_emb: (B, D) pre-computed embeddings for the conditioning.
         return: (B, C, H, W)
         """
         time_emb = sinusoidal_embedding(timesteps, self.time_mlp[0].in_features)
         time_emb = self.time_mlp(time_emb)
+        # Compute text_emb on the conditioning only if they haven't
+        # been computed before. Else use the ones that are provided
+        # as input. Helps reduce computation while sampling
         text_emb = (
             self.text_model(conditioning)
-            if conditioning is not None and self.text_model is not None
-            else None
+            if text_emb is None
+            and conditioning is not None
+            and self.text_model is not None
+            else text_emb
         )
 
         hs = []
@@ -135,4 +142,4 @@ class SimpleUNet(nn.Module):
 
         h = self.out_norm(h)
         h = self.out_act(h)
-        return self.out_conv(h)
+        return self.out_conv(h), text_emb

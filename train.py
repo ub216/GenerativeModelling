@@ -2,19 +2,26 @@ import argparse
 import os
 import shutil
 import time
-from typing import List, Optional
+from collections import defaultdict
+from typing import Dict, List, Optional
 
 import torch
 import yaml
 from loguru import logger
-from torch.amp import GradScaler, autocast
+from torch.amp import autocast
 from tqdm import tqdm
 
 import helpers.custom_types as custom_types
 import metrics
 import wandb
-from helpers.factory import (get_dataset, get_loss_function, get_metrics,
-                             get_model)
+from helpers.factory import (
+    get_dataset,
+    get_loss_function,
+    get_metrics,
+    get_model,
+    get_optimizer_manager,
+)
+from helpers.optimizer_manager import OptimizerManager
 from helpers.utils import drop_condition, save_eval_results
 
 
@@ -24,19 +31,19 @@ from helpers.utils import drop_condition, save_eval_results
 def train_one_epoch(
     model: custom_types.GenBaseModel,
     dataloader: torch.utils.data.DataLoader,
-    optimizer: torch.optim.Optimizer,
+    optimizer_manager: OptimizerManager,
     criterion: torch.nn.Module,
     device: custom_types.DeviceType,
     epoch: int = 0,
-    scaler: Optional[GradScaler] = None,
 ) -> torch.Tensor:
     model.train()
-    total_loss = 0
+    total_loss = defaultdict(float)
     pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}", leave=False)
 
     for idx, (inputs, labels) in enumerate(pbar):
+        optimizer_manager.zero_grad()
+
         inputs = inputs.to(device, non_blocking=True)
-        optimizer.zero_grad(set_to_none=True)
 
         # Use labels only if model can do conditioning
         conditioning = None
@@ -48,21 +55,35 @@ def train_one_epoch(
             outputs = model(inputs, conditioning=conditioning)
             loss = criterion(outputs, inputs)
 
+        # Wrap loss in dict if not already
+        # This is needed for optimizer manager
+        # to handle multiple optimizers (like GANs)
+        if isinstance(loss, torch.Tensor):
+            loss = {"all": loss}
+
         # backward pass with AMP scaler
-        if scaler is not None:
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-        else:
-            loss.backward()
-            optimizer.step()
+        optimizer_manager.backward(loss)
+        optimizer_manager.step()
+        update_stats = {}
+        for key in loss.keys():
+            total_loss[key] += loss[key].item()
+            wandb.log(
+                {f"batch_{key}_loss": loss[key].item()},
+                step=epoch * len(dataloader) + idx,
+            )
+            update_stats[key] = total_loss[key] / (idx + 1)
+        pbar.set_postfix(update_stats)
 
-        total_loss += loss.item()
-        wandb.log({"batch_loss": loss.item()}, step=epoch * len(dataloader) + idx)
-        pbar.set_postfix({"loss": total_loss / (idx + 1)})
+    # Backpropogate all losses missed by accumulation step
+    # The losses are incorrectly scaled when force updated
+    # TODO: adjust this
+    # optimizer_manager.step(force=True)
 
-    avg_loss = total_loss / len(dataloader)
-    logger.info(f"Epoch {epoch+1} Loss: {avg_loss:.4f}")
+    update_stats = f"Epoch {epoch+1}"
+    for key in total_loss.keys():
+        avg_loss = total_loss[key] / len(dataloader)
+        update_stats += f" {key} : {avg_loss:.4f}"
+    logger.info(update_stats)
     return avg_loss
 
 
@@ -121,7 +142,7 @@ def eval_sample(
 def train(
     model: custom_types.GenBaseModel,
     dataloader: torch.utils.data.DataLoader,
-    optimizer: torch.optim.Optimizer,
+    optimizer_manager: OptimizerManager,
     criterion: torch.nn.Module,
     compute_metrics: List[torch.nn.Module],
     device: custom_types.DeviceType,
@@ -131,12 +152,10 @@ def train(
     save_dir: str = "./",
 ):
     model.to(device)
-    scaler = GradScaler()  # AMP gradient scaler
     prev_best_score = float("inf")
-
     for epoch in range(start_epoch, epochs):
         epoch_loss = train_one_epoch(
-            model, dataloader, optimizer, criterion, device, epoch, scaler
+            model, dataloader, optimizer_manager, criterion, device, epoch
         )
         wandb.log({"epoch_loss": epoch_loss}, step=(epoch + 1) * len(dataloader))
 
@@ -171,7 +190,7 @@ def train(
                 checkpoint = {
                     "epoch": epoch,
                     "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
+                    "optimizer_state_dict": optimizer_manager.state_dict(),
                     "loss": epoch_loss,
                     "fid": curr_score,
                 }
@@ -218,11 +237,9 @@ def main(config_path: str = "config.yaml"):
 
     # Setup loss
     criterion = get_loss_function(cfg["loss"])
-    # Setup Optimizer
-    if cfg["optimizer"]["type"].lower() == "adam":
-        optimizer = torch.optim.Adam(model.parameters(), lr=cfg["optimizer"]["lr"])
-    else:
-        raise ValueError(f"Unsupported optimizer {cfg['optimizer']['type']}")
+
+    # Setup Optimizer. This is done after the model is intialized
+    optimizer_manager = get_optimizer_manager(cfg["optimizer"], model)
 
     # Load checkpoint if provided
     start_epoch = 0
@@ -231,7 +248,7 @@ def main(config_path: str = "config.yaml"):
         checkpoint = torch.load(ckpt, map_location=cfg["training"]["device"])
         model.load_state_dict(checkpoint["model_state_dict"])
         model.to(cfg["training"]["device"])
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        optimizer_manager.load_state_dict(checkpoint["optimizer_state_dict"])
         start_epoch = checkpoint["epoch"] + 1
         logger.info(f"Loaded model checkpoint from {ckpt}")
 
@@ -242,7 +259,7 @@ def main(config_path: str = "config.yaml"):
     train(
         model,
         dataloader,
-        optimizer,
+        optimizer_manager,
         criterion,
         compute_metrics,
         metric_interval=cfg["training"]["metric_interval"],

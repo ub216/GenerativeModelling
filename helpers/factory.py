@@ -8,6 +8,7 @@ import loaders
 import losses
 import metrics
 import models
+from helpers.optimizer_manager import OptimizerManager
 
 
 def get_dataset(cfg: Dict[str, Any], batch_size=None) -> torch.utils.data.DataLoader:
@@ -73,6 +74,9 @@ def get_model(
     if name == "vae":
         assert h == w, f"VAE implementation can only handle square images for now"
         return models.VAE(**params)
+    if name == "gan":
+        assert h == w, f"GAN implementation can only handle square images for now"
+        return models.GAN(**params)
     elif name == "diffusion":
         return models.DiffusionModel(**params)
     elif name == "flow":
@@ -95,3 +99,36 @@ def get_metrics(cfg: Dict[str, Any]) -> List[torch.nn.Module]:
         else:
             raise ValueError(f"Unknown metric: {name}")
     return metric
+
+
+def _get_optimizer(
+    name: str, paramertes, options: Dict[str, Any]
+) -> torch.optim.Optimizer:
+    if name.lower() == "adam":
+        return torch.optim.Adam(params=paramertes, **options)
+    else:
+        raise ValueError(f"Unknown optimizer: {name}")
+
+
+def get_optimizer_manager(
+    cfg: Dict[str, Any], model: custom_types.GenBaseModel
+) -> OptimizerManager:
+    optimizer = {}
+    if "type" in cfg:
+        # single optimizer for all parameters
+        optimizer["all"] = _get_optimizer(
+            cfg["type"], model.parameters(), cfg.get("params", {})
+        )
+    else:
+        for name, key in cfg.items():
+            module = getattr(model, name, None)
+            assert (
+                module is not None
+            ), f"{module} does not exists in model parameter groups"
+            optimizer[name] = _get_optimizer(
+                key["type"], module.parameters(), key.get("params", {})
+            )
+    optimizer_manager = OptimizerManager(
+        optimizer, use_scaler=True, accumulate_steps=cfg.get("accumulate_steps", 1)
+    )
+    return optimizer_manager

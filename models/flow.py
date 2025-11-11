@@ -26,6 +26,8 @@ class FlowModel(BaseModel):
         text_emb_dim: Optional[int] = None,
         drop_condition_ratio: float = 0.25,
         sample_condition_weight: int = 10,
+        *args,
+        **kwargs,
     ):
         super().__init__()
         self.unet = SimpleUNet(
@@ -58,7 +60,7 @@ class FlowModel(BaseModel):
         x1: Optional[torch.Tensor] = None,
         conditioning: Optional[List[str]] = None,
         *args,
-        **kwargs
+        **kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if not self.valid_input_combination(conditioning):
             raise ValueError("Invalid input combination")
@@ -73,7 +75,7 @@ class FlowModel(BaseModel):
 
         intermidiate = self.q_sample(x0, time_steps, x1)
         flow = x1 - x0
-        pred_flow = self.unet(intermidiate, time_steps, conditioning=conditioning)
+        pred_flow, _ = self.unet(intermidiate, time_steps, conditioning=conditioning)
         return pred_flow, flow
 
     def sample(
@@ -84,7 +86,7 @@ class FlowModel(BaseModel):
         batch_size: int = 16,
         conditioning: Optional[List[str]] = None,
         *args,
-        **kwargs
+        **kwargs,
     ) -> torch.Tensor:
         assert conditioning is None or len(conditioning) == num_samples
         if conditioning is None and self.has_conditional_generation:
@@ -126,25 +128,33 @@ class FlowModel(BaseModel):
                 if conditioning is not None
                 else None
             )
+            text_emb_conditioning = None
+            text_emb_unconditioning = None
             for t in reversed(range(self.test_timesteps)):
                 timestep_batch = torch.full(
                     (cur_bs,), t * self.test_delta, device=device, dtype=torch.float
                 )
                 # predict conditional and unconditional and combine (if conditioning)
                 if self.has_conditional_generation:
-                    flow_conditioning = self.unet(
-                        x_t, timestep_batch, conditioning=conditioning_batch
+                    flow_conditioning, text_emb_conditioning = self.unet(
+                        x_t,
+                        timestep_batch,
+                        conditioning=conditioning_batch,
+                        text_emb=text_emb_conditioning,
                     )
                     unconditioning_batch = [""] * cur_bs
-                    flow_unconditioning = self.unet(
-                        x_t, timestep_batch, conditioning=unconditioning_batch
+                    flow_unconditioning, text_emb_unconditioning = self.unet(
+                        x_t,
+                        timestep_batch,
+                        conditioning=unconditioning_batch,
+                        text_emb=text_emb_unconditioning,
                     )
                     # guided flow: flow_uncond + scale * (flow_cond - flow_uncond)
                     flow = flow_unconditioning + self.sample_condition_weight * (
                         flow_conditioning - flow_unconditioning
                     )
                 else:
-                    flow = self.unet(x_t, timestep_batch)
+                    flow, _ = self.unet(x_t, timestep_batch)
 
                 x_t -= flow * self.test_delta
             samples.append(x_t.cpu())

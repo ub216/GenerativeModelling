@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Dict
 
 import torch
 import torch.nn as nn
@@ -9,6 +9,7 @@ import helpers.custom_types as custom_types
 
 class PairMSELoss(nn.Module):
     def __init__(self, reduction: custom_types.ReductionType = "mean"):
+        super().__init__()
         assert reduction in [
             "sum",
             "mean",

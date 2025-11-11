@@ -22,6 +22,8 @@ class GAN(BaseModel):
         hidden_dim: int = 128,
         dropout: float = 0.5,
         device: custom_types.DeviceType = "cuda",
+        *args,
+        **kwargs,
     ):
         """
         GAN can only handle square images for now
@@ -87,7 +89,6 @@ class GAN(BaseModel):
                 ResidualConv(
                     prev_ch,
                     ch,
-                    kernel_size=3,
                     stride=2,
                     bias=False,
                     spectral_norm=True,
@@ -109,16 +110,17 @@ class GAN(BaseModel):
         self.discriminator = nn.Sequential(*dis_blocks)
 
     def forward(
-        self, x: torch.Tensor, latent: Optional[torch.Tensor] = None
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        self, x: torch.Tensor, latent: Optional[torch.Tensor] = None, *args, **kwargs
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         if latent is None:
             b = x.shape[0]
             latent = torch.randn(b, self.latent_dim).to(self.device)
         gen_sample = self.generator(latent)
-        gen_score = self.discriminator(gen_sample)
+        gen_score_gen = self.discriminator(gen_sample)
+        gen_score_dis = self.discriminator(gen_sample.detach())
         real_score = self.discriminator(x)
 
-        return gen_score, real_score
+        return gen_score_gen, gen_score_dis, real_score
 
     def sample(
         self, num_samples: int, device: custom_types.DeviceType, *args, **kwargs

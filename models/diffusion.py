@@ -26,6 +26,8 @@ class DiffusionModel(BaseModel):
         text_emb_dim: Optional[int] = None,
         drop_condition_ratio: float = 0.25,
         sample_condition_weight: int = 10,
+        *args,
+        **kwargs,
     ):
         super().__init__()
         self.unet = SimpleUNet(
@@ -59,7 +61,7 @@ class DiffusionModel(BaseModel):
         noise: Optional[torch.Tensor] = None,
         conditioning: Optional[List[str]] = None,
         *args,
-        **kwargs
+        **kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Predict the noise epsilon that was added to x0 to make x_t.
@@ -79,7 +81,7 @@ class DiffusionModel(BaseModel):
             conditioning = drop_condition(conditioning, self.drop_condition_ratio)
 
         x_noisy = self.q_sample(x0, time_steps, noise, self.train_schedule)
-        predicted_noise = self.unet(x_noisy, time_steps, conditioning=conditioning)
+        predicted_noise, _ = self.unet(x_noisy, time_steps, conditioning=conditioning)
         return predicted_noise, noise
 
     def sample(
@@ -90,7 +92,7 @@ class DiffusionModel(BaseModel):
         batch_size: int = 16,
         conditioning: Optional[List[str]] = None,
         *args,
-        **kwargs
+        **kwargs,
     ) -> torch.Tensor:
         assert conditioning is None or len(conditioning) == num_samples
         if conditioning is None and self.has_conditional_generation:
@@ -108,7 +110,7 @@ class DiffusionModel(BaseModel):
         num_samples: int,
         device: custom_types.DeviceType,
         img_size: int,
-        batch_size: int = 16,
+        batch_size: int = 128,
         channels: int = 1,
         conditioning: Optional[List[str]] = None,
     ) -> torch.Tensor:
@@ -136,7 +138,8 @@ class DiffusionModel(BaseModel):
                 if conditioning is not None
                 else None
             )
-
+            text_emb_conditioning = None
+            text_emb_unconditioning = None
             for t in reversed(range(T)):
                 timestep_batch = torch.full(
                     (cur_bs,), t, device=device, dtype=torch.long
@@ -144,20 +147,26 @@ class DiffusionModel(BaseModel):
 
                 # predict conditional and unconditional and combine (if conditioning)
                 if self.has_conditional_generation:
-                    eps_conditioning = self.unet(
-                        x_t, timestep_batch, conditioning=conditioning_batch
+                    eps_conditioning, text_emb_conditioning = self.unet(
+                        x_t,
+                        timestep_batch,
+                        conditioning=conditioning_batch,
+                        text_emb=text_emb_conditioning,
                     )
                     # unconditional batch: empty string list if model expects strings
                     unconditioning_batch = [""] * cur_bs
-                    eps_unconditioning = self.unet(
-                        x_t, timestep_batch, conditioning=unconditioning_batch
+                    eps_unconditioning, text_emb_unconditioning = self.unet(
+                        x_t,
+                        timestep_batch,
+                        conditioning=unconditioning_batch,
+                        text_emb=text_emb_unconditioning,
                     )
                     # guided epsilon: eps_uncond + scale * (eps_cond - eps_uncond)
                     eps_theta = eps_unconditioning + self.sample_condition_weight * (
                         eps_conditioning - eps_unconditioning
                     )
                 else:
-                    eps_theta = self.unet(x_t, timestep_batch, conditioning=None)
+                    eps_theta, _ = self.unet(x_t, timestep_batch, conditioning=None)
 
                 beta_t = schedule["betas"][t]
                 alpha_t = schedule["alphas"][t]

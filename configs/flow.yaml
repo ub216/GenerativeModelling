@@ -11,9 +11,10 @@ model:
   checkpoint: null                   # Use for evaluation or restarting training
 
 optimizer:
-  type: "adam"                       # could also be sgd, adamw, etc. (not yet added support)
-  lr: 0.001
-  weight_decay: 0.0
+  type: "adam"                     # could also be sgd, adamw, etc. (not yet added support)
+  params:
+    lr: 0.001
+    weight_decay: 0.0
 
 training:
   batch_size: 64

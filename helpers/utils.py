@@ -77,3 +77,50 @@ def drop_condition(conditioning: List[str], r: float) -> List[str]:
     for i in indices:
         drop_conditioning[i] = ""
     return drop_conditioning
+
+
+def update_step(
+    losses,
+    optimizers,
+    scalers=None,
+    step: int = 1,
+    accumulation: int = 1,
+):
+    """
+    Update step with optional AMP scaling and gradient accumulation.
+
+    Args:
+        losses (dict[str, torch.Tensor]): dict of losses, e.g. {"gen": g_loss, "disc": d_loss}
+        optimizers (dict[str, torch.optim.Optimizer]): dict of optimizers
+        scalers (dict[str, torch.cuda.amp.GradScaler] | None): dict of scalers, same keys as optimizers
+        step (int): current global step
+        accumulation (int): number of steps to accumulate gradients before optimizer.step()
+    """
+    assert set(losses.keys()) == set(
+        optimizers.keys()
+    ), f"Loss keys {losses.keys()} must match optimizer keys {optimizers.keys()}"
+
+    if scalers is not None:
+        assert set(scalers.keys()) == set(
+            optimizers.keys()
+        ), f"Scaler keys {scalers.keys()} must match optimizer keys {optimizers.keys()}"
+
+    # scale losses by accumulation to keep effective lr same
+    scaled_losses = {k: v.mean() / accumulation for k, v in losses.items()}
+
+    # backward pass
+    for key, opt in optimizers.items():
+        if scalers is not None:
+            scalers[key].scale(scaled_losses[key]).backward()
+        else:
+            scaled_losses[key].backward()
+
+    # only step/update every `accumulation` steps
+    if step % accumulation == 0:
+        for key, opt in optimizers.items():
+            if scalers is not None:
+                scalers[key].step(opt)
+                scalers[key].update()
+            else:
+                opt.step()
+            opt.zero_grad(set_to_none=True)

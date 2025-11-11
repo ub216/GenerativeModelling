@@ -2,15 +2,16 @@ experiment:
   name: "Generative"
 
 model:
-  type: "vae"            # options: vae, diffusion, flow, etc.
+  type: "vae"                          # options: vae, diffusion, flow, etc.
   params:
     dropout: 0.5
   checkpoint: null 
 
 optimizer:
-  type: "adam"           # could also be sgd, adamw, etc.
-  lr: 0.001
-  weight_decay: 0.0
+  type: "adam"                       # could also be sgd, adamw, etc. (not yet added support)
+  params:
+    lr: 0.001
+    weight_decay: 0.0
 
 training:
   batch_size: 64
@@ -19,7 +20,7 @@ training:
   metric_interval: 1 
     
 dataset:
-  type: "mnist"       # options: mnist, imagenet, coco
+  type: "mnist"                       # options: mnist, imagenet, coco
   params:
     root: "/data/datasets/mnist/"
     num_workers: 8
@@ -27,7 +28,7 @@ dataset:
     persistent_workers: true
 
 loss:
-  type: "vae"       # options: vae_loss, pair_mse
+  type: "vae"                         # options: vae_loss, pair_mse
   params:
     recon_loss_weight: 1.0
     kl_div_weight: 1.0

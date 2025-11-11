@@ -20,6 +20,8 @@ class VAE(BaseModel):
         latent_dim: int = 32,
         hidden_dim: int = 128,
         dropout: float = 0.5,
+        *args,
+        **kwargs,
     ):
         """
         VAE can only handle square images for now

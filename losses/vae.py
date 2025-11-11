@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Dict, Tuple
 
 import torch
 import torch.nn as nn
@@ -14,6 +14,7 @@ class VAELoss(nn.Module):
         kl_div_weight: float = 1.0,
         reduction: custom_types.ReductionType = "sum",
     ):
+        super().__init__()
         assert reduction in [
             "sum",
             "mean",
