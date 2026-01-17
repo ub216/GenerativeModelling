@@ -5,38 +5,43 @@ model:
   type: "diffusion"                     # options: vae, diffusion, flow, etc.
   params:
     timesteps: 1000
-    test_timesteps: 200
+    test_timesteps: 1000
+    channel_mults: [1, 2, 4, 8, 16]
+    num_blocks: 1
+    time_emb_dim: 128
     renormalise: true
     text_emb_dim: null                   # Set to null if CFG not required
     sample_condition_weight: 10
-  checkpoint: null                      # Use for evaluation or restarting training
+  checkpoint: null                     # Use for evaluation or restarting training
 
 optimizer:                              
-  type: "adam"                          
+  type: "adamw"                          
   params:
-    lr: 0.001
-    weight_decay: 0.0
+    lr: 0.0001
+    weight_decay: 0.01
   accumulate_steps: 1                   # Number of steps to accumulate gradients over  
 
 training:
-  batch_size: 64
-  epochs: 50
+  batch_size: 192
+  epochs: 300
   device: "cuda"
-  metric_interval: 5
+  metric_interval: 300
+  save_after_epoch: 100                 # Save all checkpoints after this epoch
 
 evaluation:
   samples: 100                          # Only used for evaluation run
     
 dataset:
-  type: "mnist"                         # options: mnist (imagenet, coco, .. in future)
+  type: "celeb"                         # options: mnist (imagenet, coco, .. in future)
   params:
-    root: "/data/datasets/mnist/"
+    root: "/data/datasets/CelebA"
     num_workers: 8
     pin_memory: true
     persistent_workers: true
+    image_size: [64, 64]
 
 loss:
-  type: "pair_mse"                      # options: vae_loss, pair_mse
+  type: "pair_smooth"                      # options: vae_loss, pair_mse
   params:
     reduction: "mean"
 

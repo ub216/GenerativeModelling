@@ -29,6 +29,8 @@ def get_dataset(cfg: Dict[str, Any], batch_size=None) -> torch.utils.data.DataLo
 
     if name == "mnist":
         return loaders.get_mnist_dataloader(**params)
+    elif name == "celeb":
+        return loaders.get_celeb_dataloader(**params)
     else:
         raise ValueError(f"Unknown dataset: {name}")
 
@@ -41,6 +43,8 @@ def get_loss_function(cfg: Dict[str, Any]) -> torch.nn.Module:
         return losses.VAELoss(**params)
     elif name == "pair_mse":
         return losses.PairMSELoss(**params)
+    elif name == "pair_smooth":
+        return losses.PairSmoothLoss(**params)
     elif name == "gan_hinge_loss":
         return losses.GANHingeLoss(**params)
     else:
@@ -106,6 +110,8 @@ def _get_optimizer(
 ) -> torch.optim.Optimizer:
     if name.lower() == "adam":
         return torch.optim.Adam(params=paramertes, **options)
+    elif name.lower() == "adamw":
+        return torch.optim.AdamW(params=paramertes, **options)
     else:
         raise ValueError(f"Unknown optimizer: {name}")
 

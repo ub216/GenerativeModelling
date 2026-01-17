@@ -4,7 +4,12 @@ from typing import List, Optional
 import cv2
 import numpy as np
 import torch
+from loguru import logger
+from functools import lru_cache
 
+@lru_cache(None)
+def log_once(msg):
+    logger.warning(msg)
 
 def save_eval_results(
     samples: torch.Tensor,
@@ -19,11 +24,11 @@ def save_eval_results(
     assert len(samples.shape) == 4  # (N, C, H, W)
     num_samples = samples.size(0)
     grid_size = int(np.ceil(np.sqrt(num_samples)))
-    sample_height, sample_width = samples.size(2), samples.size(3)
+    sample_height, sample_width, sample_channels = samples.size(2), samples.size(3), samples.size(1)
 
     # grayscale grid canvas
     grid_image = np.zeros(
-        (grid_size * sample_height, grid_size * sample_width), dtype=np.uint8
+        (grid_size * sample_height, grid_size * sample_width, sample_channels), dtype=np.uint8
     )
     # normalize conditioning list length if provided
     if conditioning is not None:
@@ -34,7 +39,7 @@ def save_eval_results(
     for idx in range(num_samples):
         row = idx // grid_size
         col = idx % grid_size
-        img = samples[idx].squeeze().cpu().numpy() * 255
+        img = samples[idx].permute(1, 2, 0).cpu().numpy() * 255
         img = img.astype(np.uint8)
 
         # overlay text if conditioning provided
@@ -53,12 +58,14 @@ def save_eval_results(
                 cv2.LINE_AA,
             )
             img = cv2.cvtColor(img_colored, cv2.COLOR_BGR2GRAY)
-
         grid_image[
             row * sample_height : (row + 1) * sample_height,
             col * sample_width : (col + 1) * sample_width,
         ] = img
 
+    # convert colour format from RGB to BGR for OpenCV
+    # remove extra channel dimension if grayscale    
+    grid_image = grid_image[:,:,::-1].squeeze()
     cv2.imwrite(filename, grid_image)
 
 

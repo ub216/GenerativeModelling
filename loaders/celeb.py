@@ -1,0 +1,103 @@
+from typing import Tuple
+
+import torch
+from torch.utils.data import DataLoader
+from torchvision import transforms
+from torchvision.datasets import CelebA
+
+
+class CelebDataset(CelebA):
+    def __init__(
+        self,
+        root: str,
+        split: str = "train",
+        transform=None,
+        target_transform=None,
+        download: bool = False,
+        attr_target: str = "all",
+    ):
+        super(CelebDataset, self).__init__(
+            root,
+            split=split,
+            transform=transform,
+            target_transform=target_transform,
+            download=download,
+        )
+        self.labels = ['5_o_clock_shadow',
+                        'arched_eyebrows',
+                        'attractive',
+                        'bags_under_eyes',
+                        'bald',
+                        'bangs',
+                        'big_lips',
+                        'big_nose',
+                        'black_hair',
+                        'blond_hair',
+                        'blurry',
+                        'brown_hair',
+                        'bushy_eyebrows',
+                        'chubby',
+                        'double_chin',
+                        'eyeglasses',
+                        'goatee',
+                        'gray_hair',
+                        'heavy_makeup',
+                        'high_cheekbones',
+                        'male',
+                        'mouth_slightly_open',
+                        'mustache',
+                        'narrow_eyes',
+                        'no_beard',
+                        'oval_face',
+                        'pale_skin',
+                        'pointy_nose',
+                        'receding_hairline',
+                        'rosy_cheeks',
+                        'sideburns',
+                        'smiling',
+                        'straight_hair',
+                        'wavy_hair',
+                        'wearing_earrings',
+                        'wearing_hat',
+                        'wearing_lipstick',
+                        'wearing_necklace',
+                        'wearing_necktie',
+                        'young']
+        if attr_target == "all":
+            self.index = torch.arange(len(self.labels))
+        else:
+            self.index = torch.tensor([self.labels.index(attr_target)])
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, str]:
+        img, target = super(CelebDataset, self).__getitem__(index)
+        return img, target[self.index]
+
+
+def get_celeb_dataloader(
+    root,
+    batch_size: int = 64,
+    shuffle: bool = True,
+    num_workers: int = 4,
+    pin_memory: bool = True,
+    image_size: int | Tuple[int, int] = (64, 64),
+    persistent_workers: bool = False,
+    split: str = "train",
+    attr_target: str = "all",
+) -> DataLoader:
+    transform=transforms.Compose([
+        transforms.Resize(image_size),
+        transforms.RandomHorizontalFlip(p=0.5),            # data augmentation
+        transforms.ToTensor(),                      # -> [0,1]
+        ])
+    dataset = CelebDataset(root=root, split=split, download=True, transform=transform, attr_target=attr_target)
+    dataloader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        drop_last=True,
+        persistent_workers=persistent_workers,
+    )
+    dataloader.image_size = image_size
+    return dataloader

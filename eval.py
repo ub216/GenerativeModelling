@@ -2,7 +2,7 @@ import argparse
 import os
 import shutil
 import time
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import torch
 import yaml
@@ -21,11 +21,12 @@ def eval_sample(
     model: custom_types.GenBaseModel,
     num_samples: int,
     device: custom_types.DeviceType,
-    img_size: int,
+    image_size: int | Tuple[int, int],
     save_dir: str = "./",
     dataloader=None,
 ) -> torch.Tensor:
     model.eval()
+    conditioning = None
     with torch.no_grad():
         if dataloader is not None and model.has_conditional_generation:
             conditioning = []
@@ -38,14 +39,14 @@ def eval_sample(
             samples = model.sample(
                 num_samples,
                 device,
-                img_size,
+                image_size,
                 batch_size=num_samples,
                 conditioning=conditioning,
             )
         else:
             # unconditional sampling
             samples = model.sample(
-                num_samples, device, img_size, batch_size=num_samples
+                num_samples, device, image_size, batch_size=num_samples
             )
 
     # log a few images
@@ -69,7 +70,7 @@ def eval(
         model,
         num_samples=n_samples,
         device=device,
-        img_size=dataloader.img_size,
+        image_size=dataloader.image_size,
         save_dir=save_dir,
         dataloader=dataloader,
     )
@@ -78,7 +79,7 @@ def eval(
             sampler_loader = model.wrap_sampler_to_loader(
                 num_samples=metric.samples,
                 device=device,
-                img_size=dataloader.img_size,
+                image_size=dataloader.image_size,
                 batch_size=dataloader.batch_size,
             )
             curr_score = metric(dataloader, sampler_loader)
@@ -115,7 +116,7 @@ def main(config_path: str = "config.yaml"):
     if cfg["model"].get("checkpoint", None) is not None:
         ckpt = cfg["model"]["checkpoint"]
         checkpoint = torch.load(ckpt, map_location=cfg["training"]["device"])
-        model.load_state_dict(checkpoint["model_state_dict"])
+        model.load_state_dict(checkpoint["model_state_dict"], strict=False)
         logger.info(f"Loaded model checkpoint from {ckpt}")
     else:
         logger.warning("No checkpoint provided, testing on random weights!")

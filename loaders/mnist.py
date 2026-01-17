@@ -47,5 +47,5 @@ def get_mnist_dataloader(
         drop_last=True,
         persistent_workers=persistent_workers,
     )
-    dataloader.img_size = 28
+    dataloader.image_size = 28
     return dataloader

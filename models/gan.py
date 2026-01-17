@@ -15,7 +15,7 @@ class GAN(BaseModel):
     def __init__(
         self,
         in_channels: int = 1,
-        img_size: int = 28,
+        image_size: int = 28,
         generator_feature_dims: List[int] = [64, 32],
         discriminator_feature_dims: List[int] = [32, 64],
         latent_dim: int = 32,
@@ -31,7 +31,7 @@ class GAN(BaseModel):
         """
         super().__init__()
 
-        self.img_size = img_size
+        self.image_size = image_size
         self.generator_feature_dims = generator_feature_dims
         self.discriminator_feature_dims = discriminator_feature_dims
         self.latent_dim = latent_dim
@@ -39,7 +39,7 @@ class GAN(BaseModel):
 
         # ---------- Generator ----------
         # # compute flattened size for convs
-        generator_reduced_size = img_size // (2 ** len(generator_feature_dims))
+        generator_reduced_size = image_size // (2 ** len(generator_feature_dims))
         conv_out_dim = (
             generator_feature_dims[0] * generator_reduced_size * generator_reduced_size
         )
@@ -99,7 +99,7 @@ class GAN(BaseModel):
             prev_ch = ch
         dis_blocks.append(nn.Flatten())
 
-        discriminator_reduced_size = img_size // (2 ** len(discriminator_feature_dims))
+        discriminator_reduced_size = image_size // (2 ** len(discriminator_feature_dims))
         discriminator_reduced_size = (
             discriminator_reduced_size * discriminator_reduced_size * prev_ch
         )

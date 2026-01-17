@@ -3,7 +3,7 @@ import os
 import shutil
 import time
 from collections import defaultdict
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import yaml
@@ -94,7 +94,7 @@ def eval_sample(
     model: custom_types.GenBaseModel,
     num_samples: int,
     device: custom_types.DeviceType,
-    img_size: int,
+    image_size: int | Tuple[int, int],
     step: int = 0,
     save_dir: str = "./",
     dataloader: Optional[torch.utils.data.DataLoader] = None,
@@ -113,14 +113,14 @@ def eval_sample(
             samples = model.sample(
                 num_samples,
                 device,
-                img_size,
+                image_size,
                 batch_size=num_samples,
                 conditioning=conditioning,
             )
         else:
             # unconditional sampling
             samples = model.sample(
-                num_samples, device, img_size, batch_size=num_samples
+                num_samples, device, image_size, batch_size=num_samples
             )
 
     # log a few images
@@ -150,26 +150,32 @@ def train(
     start_epoch: int = 0,
     metric_interval: int = 1,
     save_dir: str = "./",
+    save_after_epoch: int = float("inf"),
 ):
     model.to(device)
     prev_best_score = float("inf")
     for epoch in range(start_epoch, epochs):
+        t0 = time.time()
         epoch_loss = train_one_epoch(
             model, dataloader, optimizer_manager, criterion, device, epoch
         )
+        epoch_time = time.time() - t0
+        wandb.log({"epoch_time": epoch_time}, step=(epoch + 1) * len(dataloader))
         wandb.log({"epoch_loss": epoch_loss}, step=(epoch + 1) * len(dataloader))
-
+        
+        # Generate samples for monitoring
+        eval_sample(
+            model,
+            num_samples=16,
+            device=device,
+            image_size=dataloader.image_size,
+            step=(epoch + 1) * len(dataloader),
+            save_dir=save_dir,
+            dataloader=dataloader,
+        )
         # Generate evaluation samples/metrics
         if (epoch + 1) % metric_interval == 0 or epoch + 1 == epochs:
-            eval_sample(
-                model,
-                num_samples=16,
-                device=device,
-                img_size=dataloader.img_size,
-                step=(epoch + 1) * len(dataloader),
-                save_dir=save_dir,
-                dataloader=dataloader,
-            )
+
             curr_score = prev_best_score
             for metric in compute_metrics:
                 # FID is computed on unconditioned input only
@@ -177,7 +183,7 @@ def train(
                     sampler_loader = model.wrap_sampler_to_loader(
                         num_samples=metric.samples,
                         device=device,
-                        img_size=dataloader.img_size,
+                        image_size=dataloader.image_size,
                         batch_size=dataloader.batch_size,
                     )
                     curr_score = metric(dataloader, sampler_loader)
@@ -194,7 +200,17 @@ def train(
                     "loss": epoch_loss,
                     "fid": curr_score,
                 }
-                torch.save(checkpoint, f"{save_dir}/epoch_{epoch+1}.pth")
+                torch.save(checkpoint, f"{save_dir}/best_{epoch+1}.pth")
+        if save_after_epoch > epoch:
+            # Save last model
+            checkpoint = {
+                "epoch": epoch,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer_manager.state_dict(),
+                "loss": epoch_loss,
+                "fid": curr_score,
+            }
+            torch.save(checkpoint, f"{save_dir}/epoch_{epoch+1}.pth")        
     logger.info("Training complete.")
 
 
@@ -267,6 +283,7 @@ def main(config_path: str = "config.yaml"):
         epochs=cfg["training"]["epochs"],
         start_epoch=start_epoch,
         save_dir=f"./runs/{run_name}",
+        save_after_epoch=cfg["training"].get("save_after_epoch", float("inf")),
     )
 
 

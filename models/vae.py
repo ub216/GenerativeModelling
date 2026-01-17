@@ -15,7 +15,7 @@ class VAE(BaseModel):
     def __init__(
         self,
         in_channels: int = 1,
-        img_size: int = 28,
+        image_size: int = 28,
         feature_dims: List[int] = [32, 64],
         latent_dim: int = 32,
         hidden_dim: int = 128,
@@ -29,7 +29,7 @@ class VAE(BaseModel):
         """
         super().__init__()
 
-        self.img_size = img_size
+        self.image_size = image_size
         self.feature_dims = feature_dims
         self.latent_dim = latent_dim
 
@@ -46,7 +46,7 @@ class VAE(BaseModel):
         self.encoder_conv = nn.Sequential(*enc_blocks)
 
         # compute flattened size after convs
-        reduced_size = img_size // (2 ** len(feature_dims))
+        reduced_size = image_size // (2 ** len(feature_dims))
         conv_out_dim = feature_dims[-1] * reduced_size * reduced_size
 
         self.encoder_fc = nn.Sequential(

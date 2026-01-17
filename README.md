@@ -15,6 +15,7 @@ This repository provides a set of tools to quickly set up and experiment with ge
 - [x] Add support for flow matching
 - [ ] Add support for GANs
 - [x] Add support for CFG in diffusion/flow
+- [x] Add support for CelebA dataset
 - [ ] Update ResNet based UNet to X-former
 - [ ] Add some result comparison
 
@@ -74,7 +75,7 @@ python eval.py --config configs/diffusion.yaml
 - [`losses/`](losses/): Loss functions for training.
 - [`metrics/`](metrics/): Evaluation metrics.
 - [`loaders/`](loaders/): Dataset loaders.
-- [`helpers/`](helpers/): factory functions and classes.
+- [`helpers/`](helpers/): Factory functions and classes.
 - [`utils.py`](utils.py): Utility functions.
 
 ## Contributing

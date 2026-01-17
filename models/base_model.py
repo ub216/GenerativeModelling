@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Tuple
 
 import torch
 import torch.nn as nn
@@ -37,7 +38,7 @@ class BaseModel(ABC, nn.Module):
         self,
         num_samples: int,
         device: custom_types.DeviceType,
-        img_size: int,
+        image_size: int | Tuple[int, int],
         batch_size: int = 16,
     ) -> DataLoader:
         """
@@ -45,12 +46,12 @@ class BaseModel(ABC, nn.Module):
         Args:
             num_samples (int): Number of samples to generate.
             device (torch.device): Device to perform computation on.
-            img_size (int): Size of the generated images (assumed square).
+            image_size (int): Size of the generated images (assumed square).
             batch_size (int): Batch size for the DataLoader.
         Returns:
             DataLoader yielding generated samples.
         """
-        dataset = GeneratedDataset(self, num_samples, device, img_size, batch_size)
+        dataset = GeneratedDataset(self, num_samples, device, image_size, batch_size)
         dataloader = DataLoader(
             dataset, batch_size=batch_size, shuffle=False, num_workers=0
         )
