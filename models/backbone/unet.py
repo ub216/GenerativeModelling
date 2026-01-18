@@ -5,18 +5,19 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 import helpers.custom_types as custom_types
-from models.residual_conv import ResidualConv
+from helpers.utils import log_once
+from models.backbone.dit_block import DiTBlock
+from models.backbone.residual_conv import ResidualConv
 from models.text_model import TextModel
 from models.utils import sinusoidal_embedding
 
 
 # -------------------------
-# Simple Residual UNet
+# UNet
 # -------------------------
-class SimpleUNet(nn.Module):
+class UNet(nn.Module):
     """
-    Refactored UNet with support for variable blocks per resolution stage.
-    Optimized for complex datasets like CelebA.
+    UNet architecture for image generation with optional text conditioning and attention mechanism.
     """
 
     def __init__(
@@ -27,10 +28,12 @@ class SimpleUNet(nn.Module):
         num_blocks: Union[int, List[int]] = [1, 2, 2],
         time_emb_dim: int = 128,
         text_emb_dim: Optional[int] = None,
+        use_attention: bool = False,
         device: custom_types.DeviceType = "cuda",
     ):
         super().__init__()
-        
+
+        self.use_attention = use_attention
         # Normalize num_blocks to a list matching the number of stages
         if isinstance(num_blocks, int):
             self.num_blocks_list = [num_blocks] * len(channel_mults)
@@ -40,13 +43,13 @@ class SimpleUNet(nn.Module):
             self.num_blocks_list = num_blocks
 
         self.in_conv = nn.Conv2d(in_channels, base_channels, 3, padding=1)
-        
+
         self.time_mlp = nn.Sequential(
             nn.Linear(time_emb_dim, time_emb_dim),
             nn.SiLU(),
             nn.Linear(time_emb_dim, time_emb_dim),
         )
-        
+
         if text_emb_dim is not None:
             tm = TextModel(device)
             self.text_model = nn.Sequential(tm, nn.Linear(tm.dim, time_emb_dim))
@@ -59,16 +62,21 @@ class SimpleUNet(nn.Module):
         ch = base_channels
         for i, mult in enumerate(channel_mults):
             out_ch = base_channels * mult
-            
+
             # Create a stage consisting of multiple residual blocks
             stage_blocks = nn.ModuleList()
             for b in range(self.num_blocks_list[i]):
                 # First block handles channel transition, subsequent blocks maintain out_ch
                 block_in = ch if b == 0 else out_ch
                 stage_blocks.append(
-                    ResidualConv(block_in, out_ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim)
+                    ResidualConv(
+                        block_in,
+                        out_ch,
+                        time_emb_dim=time_emb_dim,
+                        text_emb_dim=text_emb_dim,
+                    )
                 )
-            
+
             self.encs.append(stage_blocks)
             self.downs.append(
                 nn.Conv2d(out_ch, out_ch, kernel_size=3, stride=2, padding=1)
@@ -76,27 +84,52 @@ class SimpleUNet(nn.Module):
             ch = out_ch
 
         # Bottleneck
-        self.mid1 = ResidualConv(ch, ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim)
-        self.mid2 = ResidualConv(ch, ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim)
+        if not use_attention:
+            self.mid1 = ResidualConv(
+                ch, ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim
+            )
+            self.mid2 = ResidualConv(
+                ch, ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim
+            )
+        else:
+            self.mid1 = DiTBlock(
+                in_channels=ch,
+                out_channels=ch,
+                time_emb_dim=time_emb_dim,
+                text_emb_dim=text_emb_dim,
+                image_input=True,
+            )
+            self.mid2 = DiTBlock(
+                in_channels=ch,
+                out_channels=ch,
+                time_emb_dim=time_emb_dim,
+                text_emb_dim=text_emb_dim,
+                image_input=True,
+            )
 
         # Decoder
         self.ups = nn.ModuleList()
         self.decs = nn.ModuleList()
         rev_mults = list(channel_mults)[::-1]
         rev_blocks = list(self.num_blocks_list)[::-1]
-        
+
         for i, mult in enumerate(rev_mults):
             out_ch = base_channels * mult
             self.ups.append(
                 nn.ConvTranspose2d(ch, out_ch, kernel_size=4, stride=2, padding=1)
             )
-            
+
             stage_blocks = nn.ModuleList()
             for b in range(rev_blocks[i]):
                 # First block handles concatenated skip connection (out_ch * 2)
                 block_in = out_ch * 2 if b == 0 else out_ch
                 stage_blocks.append(
-                    ResidualConv(block_in, out_ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim)
+                    ResidualConv(
+                        block_in,
+                        out_ch,
+                        time_emb_dim=time_emb_dim,
+                        text_emb_dim=text_emb_dim,
+                    )
                 )
             self.decs.append(stage_blocks)
             ch = out_ch
@@ -115,17 +148,21 @@ class SimpleUNet(nn.Module):
         # Time Embedding
         t_emb = sinusoidal_embedding(timesteps, self.time_mlp[0].in_features)
         t_emb = self.time_mlp(t_emb)
-        
+
         # Text Embedding
         # Compute text_emb on the conditioning only if they haven't
         # been computed before. Else use the ones that are provided
         # as input. Helps reduce computation while sampling
-        if text_emb is None and conditioning is not None and self.text_model is not None:
+        if (
+            text_emb is None
+            and conditioning is not None
+            and self.text_model is not None
+        ):
             text_emb = self.text_model(conditioning)
 
         hs = []
         h = self.in_conv(x)
-        
+
         # Encode Stage
         for stage_blocks, down in zip(self.encs, self.downs):
             for block in stage_blocks:
@@ -133,6 +170,10 @@ class SimpleUNet(nn.Module):
             hs.append(h)
             h = down(h)
 
+        if self.use_attention:
+            log_once(
+                f"Using attention in the bottleneck of UNet with bottleneck shape {h.shape}"
+            )
         # Bottleneck
         h = self.mid1(h, t_emb, text_emb)
         h = self.mid2(h, t_emb, text_emb)
@@ -140,13 +181,13 @@ class SimpleUNet(nn.Module):
         # Decode Stage
         for up, stage_blocks, skip in zip(self.ups, self.decs, reversed(hs)):
             h = up(h)
-            
+
             # Align shapes if input was not a power of 2
             if h.shape[-2:] != skip.shape[-2:]:
                 diff_y = skip.shape[-2] - h.shape[-2]
                 diff_x = skip.shape[-1] - h.shape[-1]
                 h = F.pad(h, (0, diff_x, 0, diff_y))
-            
+
             h = torch.cat([h, skip], dim=1)
             for block in stage_blocks:
                 h = block(h, t_emb, text_emb)

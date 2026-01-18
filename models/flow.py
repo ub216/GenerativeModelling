@@ -7,7 +7,7 @@ from loguru import logger
 import helpers.custom_types as custom_types
 from helpers.utils import drop_condition
 from models.base_model import BaseModel
-from models.simple_unet import SimpleUNet
+from models.backbone.simple_unet import SimpleUNet
 
 
 # -----------------------------
@@ -68,7 +68,7 @@ class FlowModel(BaseModel):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if not self.valid_input_combination(conditioning):
             raise ValueError("Invalid input combination")
-        
+
         if self.renormalize:
             x0 = x0 * 2.0 - 1.0  # to [-1, 1]
 
@@ -134,7 +134,9 @@ class FlowModel(BaseModel):
         samples = []
         for idx in range(math.ceil(num_samples / batch_size)):
             cur_bs = min(batch_size, num_samples - len(samples))
-            x_t = torch.randn(cur_bs, channels, image_size[0], image_size[1], device=device)
+            x_t = torch.randn(
+                cur_bs, channels, image_size[0], image_size[1], device=device
+            )
             conditioning_batch = (
                 conditioning[idx * batch_size : idx * batch_size + cur_bs]
                 if conditioning is not None

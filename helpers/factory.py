@@ -135,6 +135,10 @@ def get_optimizer_manager(
                 key["type"], module.parameters(), key.get("params", {})
             )
     optimizer_manager = OptimizerManager(
-        optimizer, use_scaler=True, accumulate_steps=cfg.get("accumulate_steps", 1)
+        optimizer,
+        model=model,
+        use_scaler=True,
+        accumulate_steps=cfg.get("accumulate_steps", 1),
+        max_grad_norm=cfg.get("max_grad_norm", float("inf")),
     )
     return optimizer_manager

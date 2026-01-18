@@ -3,7 +3,7 @@ import os
 import shutil
 import time
 from collections import defaultdict
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 import yaml
@@ -14,13 +14,9 @@ from tqdm import tqdm
 import helpers.custom_types as custom_types
 import metrics
 import wandb
-from helpers.factory import (
-    get_dataset,
-    get_loss_function,
-    get_metrics,
-    get_model,
-    get_optimizer_manager,
-)
+from models.ema import EMAModel
+from helpers.factory import (get_dataset, get_loss_function, get_metrics,
+                             get_model, get_optimizer_manager)
 from helpers.optimizer_manager import OptimizerManager
 from helpers.utils import drop_condition, save_eval_results
 
@@ -30,12 +26,14 @@ from helpers.utils import drop_condition, save_eval_results
 # -----------------------------
 def train_one_epoch(
     model: custom_types.GenBaseModel,
+    model_ema: EMAModel,
     dataloader: torch.utils.data.DataLoader,
     optimizer_manager: OptimizerManager,
     criterion: torch.nn.Module,
     device: custom_types.DeviceType,
     epoch: int = 0,
 ) -> torch.Tensor:
+    t0 = time.time()
     model.train()
     total_loss = defaultdict(float)
     pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}", leave=False)
@@ -63,7 +61,14 @@ def train_one_epoch(
 
         # backward pass with AMP scaler
         optimizer_manager.backward(loss)
-        optimizer_manager.step()
+
+        metrics = optimizer_manager.step()
+        if metrics:
+            wandb.log(metrics, step=epoch * len(dataloader) + idx)
+            # Update EMA model
+            model_ema.update(model)
+
+        # Logging
         update_stats = {}
         for key in loss.keys():
             total_loss[key] += loss[key].item()
@@ -78,8 +83,8 @@ def train_one_epoch(
     # The losses are incorrectly scaled when force updated
     # TODO: adjust this
     # optimizer_manager.step(force=True)
-
-    update_stats = f"Epoch {epoch+1}"
+    epoch_time = time.time() - t0
+    update_stats = f"Epoch {epoch+1}, Time: {epoch_time:.2f}s,"
     for key in total_loss.keys():
         avg_loss = total_loss[key] / len(dataloader)
         update_stats += f" {key} : {avg_loss:.4f}"
@@ -98,6 +103,7 @@ def eval_sample(
     step: int = 0,
     save_dir: str = "./",
     dataloader: Optional[torch.utils.data.DataLoader] = None,
+    is_ema: bool = True,
 ) -> torch.Tensor:
     model.eval()
     conditioning = None
@@ -125,12 +131,13 @@ def eval_sample(
 
     # log a few images
     samples_cpu = samples.cpu()
-    for idx in range(min(num_samples, 4)):
-        wandb.log({f"generated_{idx}": wandb.Image(samples_cpu[idx])}, step=step)
+    if is_ema:
+        for idx in range(min(num_samples, 4)):
+            wandb.log({f"generated_{idx}": wandb.Image(samples_cpu[idx])}, step=step)
 
     save_eval_results(
         samples_cpu,
-        filename=f"{save_dir}/generated_samples_step_{step}.png",
+        filename=f"{save_dir}/generated_samples_step_{step}_{'ema' if is_ema else 'normal'}.png",
         conditioning=conditioning,
     )
     return samples
@@ -141,6 +148,7 @@ def eval_sample(
 # -----------------------------
 def train(
     model: custom_types.GenBaseModel,
+    model_ema: EMAModel,
     dataloader: torch.utils.data.DataLoader,
     optimizer_manager: OptimizerManager,
     criterion: torch.nn.Module,
@@ -152,20 +160,29 @@ def train(
     save_dir: str = "./",
     save_after_epoch: int = float("inf"),
 ):
-    model.to(device)
     prev_best_score = float("inf")
     for epoch in range(start_epoch, epochs):
         t0 = time.time()
         epoch_loss = train_one_epoch(
-            model, dataloader, optimizer_manager, criterion, device, epoch
+            model, model_ema, dataloader, optimizer_manager, criterion, device, epoch
         )
         epoch_time = time.time() - t0
         wandb.log({"epoch_time": epoch_time}, step=(epoch + 1) * len(dataloader))
         wandb.log({"epoch_loss": epoch_loss}, step=(epoch + 1) * len(dataloader))
-        
+
         # Generate samples for monitoring
         eval_sample(
             model,
+            num_samples=16,
+            device=device,
+            image_size=dataloader.image_size,
+            step=(epoch + 1) * len(dataloader),
+            save_dir=save_dir,
+            dataloader=dataloader,
+            is_ema=False,
+        )
+        eval_sample(
+            model_ema,
             num_samples=16,
             device=device,
             image_size=dataloader.image_size,
@@ -196,21 +213,22 @@ def train(
                 checkpoint = {
                     "epoch": epoch,
                     "model_state_dict": model.state_dict(),
+                    "model_ema_state_dict": model_ema.state_dict(),
                     "optimizer_state_dict": optimizer_manager.state_dict(),
                     "loss": epoch_loss,
                     "fid": curr_score,
                 }
                 torch.save(checkpoint, f"{save_dir}/best_{epoch+1}.pth")
-        if save_after_epoch > epoch:
+        if save_after_epoch <= epoch:
             # Save last model
             checkpoint = {
                 "epoch": epoch,
                 "model_state_dict": model.state_dict(),
+                "model_ema_state_dict": model_ema.state_dict(),
                 "optimizer_state_dict": optimizer_manager.state_dict(),
                 "loss": epoch_loss,
-                "fid": curr_score,
             }
-            torch.save(checkpoint, f"{save_dir}/epoch_{epoch+1}.pth")        
+            torch.save(checkpoint, f"{save_dir}/epoch_{epoch+1}.pth")
     logger.info("Training complete.")
 
 
@@ -257,16 +275,25 @@ def main(config_path: str = "config.yaml"):
     # Setup Optimizer. This is done after the model is intialized
     optimizer_manager = get_optimizer_manager(cfg["optimizer"], model)
 
+    # Create EMA model for stable sampling
+    model_ema = EMAModel(
+        model,
+        decay=cfg["training"].get("model_ema_decay", 0),  # 0 means no EMA
+    )
+
     # Load checkpoint if provided
     start_epoch = 0
     if cfg["model"].get("checkpoint", None) is not None:
         ckpt = cfg["model"]["checkpoint"]
         checkpoint = torch.load(ckpt, map_location=cfg["training"]["device"])
         model.load_state_dict(checkpoint["model_state_dict"])
-        model.to(cfg["training"]["device"])
+        model_ema.load_state_dict(checkpoint["model_ema_state_dict"])
         optimizer_manager.load_state_dict(checkpoint["optimizer_state_dict"])
         start_epoch = checkpoint["epoch"] + 1
         logger.info(f"Loaded model checkpoint from {ckpt}")
+
+    model.to(cfg["training"]["device"])
+    model_ema.to(cfg["training"]["device"])
 
     # Metrics
     compute_metrics = get_metrics(cfg.get("metrics", None))
@@ -274,6 +301,7 @@ def main(config_path: str = "config.yaml"):
     # Training loop
     train(
         model,
+        model_ema,
         dataloader,
         optimizer_manager,
         criterion,

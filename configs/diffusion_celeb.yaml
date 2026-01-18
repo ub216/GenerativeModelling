@@ -6,12 +6,13 @@ model:
   params:
     timesteps: 1000
     test_timesteps: 1000
-    channel_mults: [1, 2, 4, 8, 16]
-    num_blocks: 1
+    channel_mults: [1, 2, 4, 8]
+    num_blocks: [1, 2, 2, 2]
+    use_attention: true
     time_emb_dim: 128
-    renormalise: true
     text_emb_dim: null                   # Set to null if CFG not required
     sample_condition_weight: 10
+    renormalise: true
   checkpoint: null                     # Use for evaluation or restarting training
 
 optimizer:                              
@@ -19,13 +20,15 @@ optimizer:
   params:
     lr: 0.0001
     weight_decay: 0.01
-  accumulate_steps: 1                   # Number of steps to accumulate gradients over  
+  accumulate_steps: 1                   # Number of steps to accumulate gradients over
+  max_grad_norm: 1.0                    # Set to inf to disable gradient clipping  
 
 training:
   batch_size: 192
   epochs: 300
   device: "cuda"
   metric_interval: 300
+  ema_decay: 0.9999                    # Set to 0 to disable EMA
   save_after_epoch: 100                 # Save all checkpoints after this epoch
 
 evaluation:

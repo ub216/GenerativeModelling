@@ -5,7 +5,7 @@ import torch.nn as nn
 
 import helpers.custom_types as custom_types
 from models.base_model import BaseModel
-from models.residual_conv import ResidualConv, ResidualDeconv
+from models.backbone.residual_conv import ResidualConv, ResidualDeconv
 
 
 # -----------------------------

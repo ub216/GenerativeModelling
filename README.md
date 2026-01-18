@@ -16,7 +16,7 @@ This repository provides a set of tools to quickly set up and experiment with ge
 - [ ] Add support for GANs
 - [x] Add support for CFG in diffusion/flow
 - [x] Add support for CelebA dataset
-- [ ] Update ResNet based UNet to X-former
+- [x] Add DiT blocks
 - [ ] Add some result comparison
 
 ## Getting Started

@@ -5,7 +5,7 @@ import torch.nn as nn
 
 import helpers.custom_types as custom_types
 from models.base_model import BaseModel
-from models.residual_conv import ResidualConv, ResidualDeconv
+from models.backbone.residual_conv import ResidualConv, ResidualDeconv
 
 
 # -----------------------------
@@ -99,7 +99,9 @@ class GAN(BaseModel):
             prev_ch = ch
         dis_blocks.append(nn.Flatten())
 
-        discriminator_reduced_size = image_size // (2 ** len(discriminator_feature_dims))
+        discriminator_reduced_size = image_size // (
+            2 ** len(discriminator_feature_dims)
+        )
         discriminator_reduced_size = (
             discriminator_reduced_size * discriminator_reduced_size * prev_ch
         )

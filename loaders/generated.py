@@ -26,8 +26,9 @@ class GeneratedDataset(Dataset):
 
     @torch.no_grad()
     def __getitem__(self, *args, **kwargs) -> Tuple[torch.Tensor, str]:
-        sample = self.model.sample(1, self.device, self.image_size, batch_size=1).squeeze(
+        sample = self.model.sample(
+            1, self.device, self.image_size, batch_size=1
+        ).squeeze(
             0
         )  # (C,H,W)
         return sample, str(0)  # label not needed
-
