@@ -7,6 +7,7 @@ from torch.nn import functional as F
 import helpers.custom_types as custom_types
 from helpers.utils import log_once
 from models.backbone.dit_block import DiTBlock
+from models.backbone.positional_embeddings import get_2d_sincos_pos_embed
 from models.backbone.residual_conv import ResidualConv
 from models.text_model import TextModel
 from models.utils import sinusoidal_embedding
@@ -30,6 +31,7 @@ class UNet(nn.Module):
         text_emb_dim: Optional[int] = None,
         use_attention: bool = False,
         device: custom_types.DeviceType = "cuda",
+        max_image_size: int = 256,
     ):
         super().__init__()
 
@@ -97,15 +99,22 @@ class UNet(nn.Module):
                 out_channels=ch,
                 time_emb_dim=time_emb_dim,
                 text_emb_dim=text_emb_dim,
-                image_input=True,
             )
             self.mid2 = DiTBlock(
                 in_channels=ch,
                 out_channels=ch,
                 time_emb_dim=time_emb_dim,
                 text_emb_dim=text_emb_dim,
-                image_input=True,
             )
+            bottleneck_grid = max_image_size // (2 ** len(channel_mults))
+            pos_embed = get_2d_sincos_pos_embed(
+                ch, max_image_size // (2 ** len(channel_mults))
+            )
+            pos_embed = pos_embed.view(1, bottleneck_grid, bottleneck_grid, ch)
+            log_once(
+                f"pos_embed shape: {pos_embed.shape} for bottleneck size {bottleneck_grid}"
+            )
+            self.register_buffer("pos_embed", pos_embed)  # (1, h, w, c)
 
         # Decoder
         self.ups = nn.ModuleList()
@@ -160,38 +169,50 @@ class UNet(nn.Module):
         ):
             text_emb = self.text_model(conditioning)
 
-        hs = []
-        h = self.in_conv(x)
+        ys = []
+        y = self.in_conv(x)
 
         # Encode Stage
         for stage_blocks, down in zip(self.encs, self.downs):
             for block in stage_blocks:
-                h = block(h, t_emb, text_emb)
-            hs.append(h)
-            h = down(h)
+                y = block(y, t_emb, text_emb)
+            ys.append(y)
+            y = down(y)
 
         if self.use_attention:
             log_once(
-                f"Using attention in the bottleneck of UNet with bottleneck shape {h.shape}"
+                f"Using attention in the bottleneck of UNet with bottleneck shape {y.shape}"
             )
-        # Bottleneck
-        h = self.mid1(h, t_emb, text_emb)
-        h = self.mid2(h, t_emb, text_emb)
+            b, c, h, w = y.shape
+            y = y.view(b, c, h * w).permute(0, 2, 1)  # (b, seq_len, c)
+            log_once(
+                f"Reshaped bottleneck y to {y.shape} for attention, pos_embed shape: {self.pos_embed.shape}"
+            )
+            curr_pos = self.pos_embed[:, :h, :w, :].reshape(
+                1, h * w, c
+            )  # (1, seq_len, c)
+            y = y + curr_pos
 
+        # Bottleneck
+        y = self.mid1(y, t_emb, text_emb)
+        y = self.mid2(y, t_emb, text_emb)
+
+        if self.use_attention:
+            y = y.permute(0, 2, 1).contiguous().view(b, c, h, w)
         # Decode Stage
-        for up, stage_blocks, skip in zip(self.ups, self.decs, reversed(hs)):
-            h = up(h)
+        for up, stage_blocks, skip in zip(self.ups, self.decs, reversed(ys)):
+            y = up(y)
 
             # Align shapes if input was not a power of 2
-            if h.shape[-2:] != skip.shape[-2:]:
-                diff_y = skip.shape[-2] - h.shape[-2]
-                diff_x = skip.shape[-1] - h.shape[-1]
-                h = F.pad(h, (0, diff_x, 0, diff_y))
+            if y.shape[-2:] != skip.shape[-2:]:
+                diff_y = skip.shape[-2] - y.shape[-2]
+                diff_x = skip.shape[-1] - y.shape[-1]
+                y = F.pad(y, (0, diff_x, 0, diff_y))
 
-            h = torch.cat([h, skip], dim=1)
+            y = torch.cat([y, skip], dim=1)
             for block in stage_blocks:
-                h = block(h, t_emb, text_emb)
+                y = block(y, t_emb, text_emb)
 
-        h = self.out_norm(h)
-        h = self.out_act(h)
-        return self.out_conv(h), text_emb
+        y = self.out_norm(y)
+        y = self.out_act(y)
+        return self.out_conv(y), text_emb

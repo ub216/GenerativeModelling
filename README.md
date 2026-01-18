@@ -76,7 +76,6 @@ python eval.py --config configs/diffusion.yaml
 - [`metrics/`](metrics/): Evaluation metrics.
 - [`loaders/`](loaders/): Dataset loaders.
 - [`helpers/`](helpers/): Factory functions and classes.
-- [`utils.py`](utils.py): Utility functions.
 
 ## Contributing
 

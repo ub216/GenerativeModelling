@@ -131,6 +131,7 @@ def get_celeb_dataloader(
 ) -> DataLoader:
     transform = transforms.Compose(
         [
+            transforms.CenterCrop(178),
             transforms.Resize(image_size),
             transforms.RandomHorizontalFlip(p=0.5),  # data augmentation
             transforms.ToTensor(),  # -> [0,1]

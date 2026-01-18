@@ -13,10 +13,8 @@ class DiTBlock(torch.nn.Module):
         text_emb_dim: Optional[int] = None,
         num_heads: int = 8,
         intialise_zero: bool = True,
-        image_input: bool = False,
     ):
         super().__init__()
-        self.image_input = image_input
         # attention block
         self.attention = torch.nn.MultiheadAttention(
             embed_dim=in_channels, num_heads=num_heads, batch_first=True
@@ -56,9 +54,6 @@ class DiTBlock(torch.nn.Module):
         time_emb: torch.Tensor,
         text_emb: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        if self.image_input:
-            b, c, h, w = x.shape
-            x_reshaped = x.view(b, c, h * w).permute(0, 2, 1)  # (b, seq_len, c)
 
         # Process Conditionings
         t_cond = self.time_mlp(time_emb)
@@ -72,20 +67,18 @@ class DiTBlock(torch.nn.Module):
         gamma1, beta1, alpha1, gamma2, beta2, alpha2 = cond_params.chunk(6, dim=2)
 
         # attention block with adaLN-Zero
-        normed_x = self.norm(x_reshaped)
+        normed_x = self.norm(x)
         # apply scale and shift (gamma and beta)
         normed_x = normed_x * (1 + gamma1) + beta1
         attn_output, _ = self.attention(normed_x, normed_x, normed_x)
         # apply gate (alpha)
-        x_reshaped = x_reshaped + (alpha1 * attn_output)
+        x_attn = x + (alpha1 * attn_output)
 
         # FFN block with adaLN-Zero
-        normed_x = self.norm(x_reshaped)
+        normed_x = self.norm(x_attn)
         normed_x = normed_x * (1 + gamma2) + beta2
         ffn_output = self.ffn(normed_x)
         # apply gate (alpha)
-        x_reshaped = x_reshaped + (alpha2 * ffn_output)
-        if self.image_input:
-            x_reshaped = x_reshaped.permute(0, 2, 1).contiguous().view(b, -1, h, w)
+        x_dit = x_attn + (alpha2 * ffn_output)
 
-        return x_reshaped
+        return x_dit
