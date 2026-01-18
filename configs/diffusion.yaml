@@ -5,7 +5,7 @@ model:
   type: "diffusion"                     # options: vae, diffusion, flow, etc.
   params:
     timesteps: 1000
-    test_timesteps: 200
+    test_timesteps: 1000
     renormalise: true
     text_emb_dim: null                   # Set to null if CFG not required
     sample_condition_weight: 10
@@ -22,7 +22,8 @@ training:
   batch_size: 64
   epochs: 50
   device: "cuda"
-  metric_interval: 5
+  metric_interval: 500
+  save_after_epoch: -1  
 
 evaluation:
   samples: 100                          # Only used for evaluation run

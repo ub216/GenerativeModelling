@@ -6,8 +6,8 @@ from loguru import logger
 
 import helpers.custom_types as custom_types
 from helpers.utils import drop_condition
-from models.base_model import BaseModel
 from models.backbone.simple_unet import SimpleUNet
+from models.base_model import BaseModel
 
 
 # -----------------------------
@@ -137,40 +137,41 @@ class FlowModel(BaseModel):
             x_t = torch.randn(
                 cur_bs, channels, image_size[0], image_size[1], device=device
             )
-            conditioning_batch = (
+
+            cond_batch = (
                 conditioning[idx * batch_size : idx * batch_size + cur_bs]
-                if conditioning is not None
+                if conditioning
                 else None
             )
-            text_emb_conditioning = None
-            text_emb_unconditioning = None
+            uncond_batch = [""] * cur_bs if self.has_conditional_generation else None
+
             for t in reversed(range(self.test_timesteps)):
-                timestep_batch = torch.full(
-                    (cur_bs,), t * self.test_delta, device=device, dtype=torch.float
-                )
-                # predict conditional and unconditional and combine (if conditioning)
+                vec_t = torch.full((cur_bs,), t * self.test_delta, device=device)
+
                 if self.has_conditional_generation:
-                    flow_conditioning, text_emb_conditioning = self.unet(
-                        x_t,
-                        timestep_batch,
-                        conditioning=conditioning_batch,
-                        text_emb=text_emb_conditioning,
+                    # We double the batch size to do cond and uncond in ONE pass
+                    batched_x = torch.cat([x_t, x_t], dim=0)
+                    batched_t = torch.cat([vec_t, vec_t], dim=0)
+                    batched_cond = cond_batch + uncond_batch
+
+                    # Single forward pass
+                    batched_flow, _ = self.unet(
+                        batched_x, batched_t, conditioning=batched_cond
                     )
-                    unconditioning_batch = [""] * cur_bs
-                    flow_unconditioning, text_emb_unconditioning = self.unet(
-                        x_t,
-                        timestep_batch,
-                        conditioning=unconditioning_batch,
-                        text_emb=text_emb_unconditioning,
-                    )
-                    # guided flow: flow_uncond + scale * (flow_cond - flow_uncond)
-                    flow = flow_unconditioning + self.sample_condition_weight * (
-                        flow_conditioning - flow_unconditioning
+
+                    # Split the results back
+                    flow_cond, flow_uncond = batched_flow.chunk(2)
+
+                    # Apply Guidance
+                    flow = flow_uncond + self.sample_condition_weight * (
+                        flow_cond - flow_uncond
                     )
                 else:
-                    flow, _ = self.unet(x_t, timestep_batch)
+                    flow, _ = self.unet(x_t, vec_t)
 
+                # Euler step
                 x_t -= flow * self.test_delta
+
             samples.append(x_t.cpu())
         samples = torch.cat(samples, dim=0)[:num_samples]
         self.unet.train()

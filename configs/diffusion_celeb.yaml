@@ -1,5 +1,6 @@
 experiment:
   name: "Generative"
+  seed: 42                               # Random seed for reproducibility
 
 model:
   type: "diffusion"                     # options: vae, diffusion, flow, etc.

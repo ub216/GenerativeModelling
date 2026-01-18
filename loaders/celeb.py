@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import List, Optional, Tuple, Union
 
 import torch
 from torch.utils.data import DataLoader
@@ -14,7 +14,8 @@ class CelebDataset(CelebA):
         transform=None,
         target_transform=None,
         download: bool = False,
-        attr_target: str = "all",
+        attr_target: Union[str, List[str]] = "all",
+        use_negation: bool = False,  # Toggle "no [attribute]" vs omitting it
     ):
         super(CelebDataset, self).__init__(
             root,
@@ -23,7 +24,9 @@ class CelebDataset(CelebA):
             target_transform=target_transform,
             download=download,
         )
-        self.labels = [
+
+        # Standard 40 CelebA attributes
+        self.all_labels = [
             "5_o_clock_shadow",
             "arched_eyebrows",
             "attractive",
@@ -65,14 +68,54 @@ class CelebDataset(CelebA):
             "wearing_necktie",
             "young",
         ]
+
+        self.use_negation = use_negation
+
+        # Handle attribute selection
         if attr_target == "all":
-            self.index = torch.arange(len(self.labels))
-        else:
-            self.index = torch.tensor([self.labels.index(attr_target)])
+            self.selected_indices = torch.arange(len(self.all_labels))
+        elif isinstance(attr_target, str):
+            self.selected_indices = torch.tensor([self.all_labels.index(attr_target)])
+        elif isinstance(attr_target, list):
+            self.selected_indices = torch.tensor(
+                [self.all_labels.index(a) for a in attr_target]
+            )
+
+        # Store selected label names for string formatting
+        self.selected_labels = [self.all_labels[i] for i in self.selected_indices]
+
+    def _generate_caption(self, attr_values: torch.Tensor) -> str:
+        """
+        Converts a tensor of 1/-1 into a comma-separated string.
+        """
+        tags = []
+        for i, val in enumerate(attr_values):
+            label_name = self.selected_labels[i].replace(
+                "_", " "
+            )  # Clean up underscores
+
+            if val > 0:
+                tags.append(label_name)
+            elif self.use_negation:
+                # Only add "no [attr]" if explicitly requested
+                tags.append(f"no {label_name}")
+
+        # If no attributes are positive, return a generic prompt
+        if not tags:
+            return ""
+
+        return ", ".join(tags)
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, str]:
-        img, target = super(CelebDataset, self).__getitem__(index)
-        return img, target[self.index]
+        img, all_target = super(CelebDataset, self).__getitem__(index)
+
+        # Filter target to only include selected attributes
+        selected_attr_values = all_target[self.selected_indices]
+
+        # Convert to string
+        caption = self._generate_caption(selected_attr_values)
+
+        return img, caption
 
 
 def get_celeb_dataloader(

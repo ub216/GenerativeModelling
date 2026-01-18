@@ -14,11 +14,11 @@ from tqdm import tqdm
 import helpers.custom_types as custom_types
 import metrics
 import wandb
-from models.ema import EMAModel
 from helpers.factory import (get_dataset, get_loss_function, get_metrics,
                              get_model, get_optimizer_manager)
 from helpers.optimizer_manager import OptimizerManager
 from helpers.utils import drop_condition, save_eval_results
+from models.ema import EMAModel
 
 
 # -----------------------------
@@ -251,6 +251,8 @@ def main(config_path: str = "config.yaml"):
     torch.backends.cudnn.enabled = True
 
     # Setup experiment
+    torch.manual_seed(cfg["experiment"].get("seed", 42))
+    logger.info(f"Torch seed set to {cfg['experiment'].get('seed', 42)}")
     run_name = f"{cfg['model']['type'].lower()}_{cfg['dataset']['type'].lower()}_{time.strftime('%Y%m%d-%H%M%S')}"
     wandb.init(
         project=cfg["experiment"]["name"],
@@ -278,7 +280,7 @@ def main(config_path: str = "config.yaml"):
     # Create EMA model for stable sampling
     model_ema = EMAModel(
         model,
-        decay=cfg["training"].get("model_ema_decay", 0),  # 0 means no EMA
+        decay=cfg["training"].get("ema_decay", 0),  # 0 means no EMA
     )
 
     # Load checkpoint if provided

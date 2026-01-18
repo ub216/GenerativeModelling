@@ -6,8 +6,8 @@ from loguru import logger
 
 import helpers.custom_types as custom_types
 from helpers.utils import drop_condition, log_once
-from models.base_model import BaseModel
 from models.backbone.unet import UNet
+from models.base_model import BaseModel
 
 
 # -----------------------------
@@ -61,6 +61,17 @@ class DiffusionModel(BaseModel):
         )
         for k, v in train_sched.items():
             self.register_buffer(f"train_{k}", v)
+
+        # Test schedule (can be different number of timesteps)
+        if self.test_timesteps != self.timesteps:
+            test_sched = prepare_noise_schedule(
+                self.test_timesteps, schedule_type=schedule_type
+            )
+            for k, v in test_sched.items():
+                self.register_buffer(f"test_{k}", v)
+        else:
+            for k in train_sched.keys():
+                self.register_buffer(f"test_{k}", getattr(self, f"train_{k}"))
 
         if self.has_conditional_generation:
             logger.info("Created a conditioned diffusion model")
@@ -139,17 +150,9 @@ class DiffusionModel(BaseModel):
                 num_samples, device, image_size, batch_size, conditioning, T_test
             )
         else:
-            if T_test != self.timesteps:
-                log_once(
-                    "DDPM sampling usually requires test_timesteps == train_timesteps. Switching to DDIM."
-                )
-                samples = self._sample_ddim(
-                    num_samples, device, image_size, batch_size, conditioning, T_test
-                )
-            else:
-                samples = self._sample_ddpm(
-                    num_samples, device, image_size, batch_size, conditioning
-                )
+            samples = self._sample_ddpm(
+                num_samples, device, image_size, batch_size, conditioning
+            )
 
         self.unet.train()
         if self.renormalise:
@@ -235,7 +238,7 @@ class DiffusionModel(BaseModel):
             )
             u_batch = [""] * cur_bs if self.has_conditional_generation else None
 
-            for t in reversed(range(self.timesteps)):
+            for t in reversed(range(self.test_timesteps)):
                 t_batch = torch.full((cur_bs,), t, device=device, dtype=torch.long)
 
                 if self.has_conditional_generation:
@@ -251,10 +254,10 @@ class DiffusionModel(BaseModel):
                 else:
                     eps_theta, _ = self.unet(x_t, t_batch)
 
-                alpha_t = self.train_alphas[t]
-                alpha_cum_t = self.train_alphas_cumprod[t]
-                beta_t = self.train_betas[t]
-                sigma_t = torch.sqrt(self.train_posterior_variance[t])
+                alpha_t = self.test_alphas[t]
+                alpha_cum_t = self.test_alphas_cumprod[t]
+                beta_t = self.test_betas[t]
+                sigma_t = torch.sqrt(self.test_posterior_variance[t])
 
                 mean = (1.0 / torch.sqrt(alpha_t)) * (
                     x_t - (beta_t / torch.sqrt(1 - alpha_cum_t)) * eps_theta
