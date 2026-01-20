@@ -169,6 +169,13 @@ class FlowModel(BaseModel):
                 else:
                     flow, _ = self.unet(x_t, vec_t)
 
+                # dynamic thresholding to avoid exploding values
+                current_t = t * self.test_delta
+                pred_x0 = x_t - current_t * flow
+                pred_x0_thresholded = self._dynamic_threshold(pred_x0)
+                if current_t > 0:
+                    flow = (x_t - pred_x0_thresholded) / current_t
+
                 # Euler step
                 x_t -= flow * self.test_delta
 
@@ -178,6 +185,27 @@ class FlowModel(BaseModel):
         if self.renormalize:
             return (samples + 1.0) / 2.0  # to [0, 1]
         return samples.clamp(0.0, 1.0)  # adjust if dataset is [-1,1]
+
+    def _dynamic_threshold(
+        self, x0: torch.Tensor, p: float = 0.995, c: float = 1.0
+    ) -> torch.Tensor:
+        """
+        x0: (B, C, H, W) - The predicted clean image
+        p: Percentile (usually 0.995)
+        c: Target threshold (usually 1.0)
+        """
+        batch_size, channels, height, width = x0.shape
+        # Flatten to (batch, pixels) to find quantile per image
+        x_flat = x0.reshape(batch_size, -1)
+
+        # Calculate the s-th percentile of the absolute values
+        s = torch.quantile(torch.abs(x_flat), p, dim=1)
+
+        # Only scale if the s-th percentile is greater than the target threshold 'c'
+        s = torch.clamp(s, min=c).view(batch_size, 1, 1, 1)
+
+        # Clamp to [-s, s] and then divide by s to bring back to [-1, 1]
+        return torch.clamp(x0, -s, s) / s
 
     def q_sample(
         self, x0: torch.Tensor, t: torch.Tensor, x1: torch.Tensor

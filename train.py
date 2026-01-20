@@ -115,7 +115,11 @@ def eval_sample(
                 if len(conditioning) >= num_samples:
                     break
             conditioning = conditioning[:num_samples]
-            conditioning = drop_condition(conditioning, 0.25)
+            conditioning = (
+                drop_condition(conditioning, 0.25)
+                if sum([c == "" for c in conditioning]) == 0
+                else conditioning
+            )
             samples = model.sample(
                 num_samples,
                 device,
@@ -271,31 +275,33 @@ def main(config_path: str = "config.yaml"):
     # channel dimension. This is required to initiate models
     model = get_model(cfg["model"], dataloader)
 
-    # Setup loss
-    criterion = get_loss_function(cfg["loss"])
-
-    # Setup Optimizer. This is done after the model is intialized
-    optimizer_manager = get_optimizer_manager(cfg["optimizer"], model)
-
     # Create EMA model for stable sampling
     model_ema = EMAModel(
         model,
         decay=cfg["training"].get("ema_decay", 0),  # 0 means no EMA
     )
 
+    model.to(cfg["training"]["device"])
+    model_ema.to(cfg["training"]["device"])
+
+    # Setup loss
+    criterion = get_loss_function(cfg["loss"])
+
+    # Setup Optimizer. This is done after the model is intialized
+    optimizer_manager = get_optimizer_manager(cfg["optimizer"], model)
+
     # Load checkpoint if provided
     start_epoch = 0
     if cfg["model"].get("checkpoint", None) is not None:
         ckpt = cfg["model"]["checkpoint"]
         checkpoint = torch.load(ckpt, map_location=cfg["training"]["device"])
-        model.load_state_dict(checkpoint["model_state_dict"])
-        model_ema.load_state_dict(checkpoint["model_ema_state_dict"])
-        optimizer_manager.load_state_dict(checkpoint["optimizer_state_dict"])
-        start_epoch = checkpoint["epoch"] + 1
+        model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+        model_ema.load_state_dict(checkpoint["model_ema_state_dict"], strict=False)
+        if "optimizer_state_dict" in checkpoint:
+            optimizer_manager.load_state_dict(checkpoint["optimizer_state_dict"])
+        if "epoch" in checkpoint:
+            start_epoch = checkpoint["epoch"] + 1
         logger.info(f"Loaded model checkpoint from {ckpt}")
-
-    model.to(cfg["training"]["device"])
-    model_ema.to(cfg["training"]["device"])
 
     # Metrics
     compute_metrics = get_metrics(cfg.get("metrics", None))

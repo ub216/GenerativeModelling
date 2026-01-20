@@ -5,7 +5,7 @@ import torch
 from loguru import logger
 
 import helpers.custom_types as custom_types
-from helpers.utils import drop_condition, log_once
+from helpers.utils import drop_condition
 from models.backbone.unet import UNet
 from models.base_model import BaseModel
 
@@ -44,6 +44,7 @@ class DiffusionModel(BaseModel):
             device=device,
             use_attention=use_attention,
         )
+
         self.in_channels = in_channels
         self.timesteps = timesteps
         self.test_timesteps = (
@@ -68,10 +69,12 @@ class DiffusionModel(BaseModel):
                 self.test_timesteps, schedule_type=schedule_type
             )
             for k, v in test_sched.items():
-                self.register_buffer(f"test_{k}", v)
+                self.register_buffer(f"test_{k}", v, persistent=False)
         else:
             for k in train_sched.keys():
-                self.register_buffer(f"test_{k}", getattr(self, f"train_{k}"))
+                self.register_buffer(
+                    f"test_{k}", getattr(self, f"train_{k}"), persistent=False
+                )
 
         if self.has_conditional_generation:
             logger.info("Created a conditioned diffusion model")
@@ -211,11 +214,15 @@ class DiffusionModel(BaseModel):
                     else torch.tensor(1.0).to(device)
                 )
 
-                # 1. Estimate x0
+                # estimate x0
                 pred_x0 = (
                     x_t - torch.sqrt(1 - alpha_bar_curr) * eps_theta
                 ) / torch.sqrt(alpha_bar_curr)
-                # 2. Compute direction pointing to x_t
+
+                # dynamic thresholding to keep pixel values in check
+                pred_x0 = self._dynamic_threshold(pred_x0)
+
+                # compute direction pointing to x_t
                 dir_xt = torch.sqrt(1 - alpha_bar_next) * eps_theta
                 x_t = torch.sqrt(alpha_bar_next) * pred_x0 + dir_xt
 
@@ -224,13 +231,13 @@ class DiffusionModel(BaseModel):
 
     @torch.no_grad()
     def _sample_ddpm(self, num_samples, device, image_size, batch_size, conditioning):
-        # Standard DDPM requires stepping through every single train timestep
         samples = []
         for idx in range(math.ceil(num_samples / batch_size)):
             cur_bs = min(batch_size, num_samples - len(samples))
             x_t = torch.randn(
                 cur_bs, self.in_channels, image_size[0], image_size[1], device=device
             )
+
             c_batch = (
                 conditioning[idx * batch_size : idx * batch_size + cur_bs]
                 if conditioning
@@ -254,18 +261,58 @@ class DiffusionModel(BaseModel):
                 else:
                     eps_theta, _ = self.unet(x_t, t_batch)
 
-                alpha_t = self.test_alphas[t]
                 alpha_cum_t = self.test_alphas_cumprod[t]
-                beta_t = self.test_betas[t]
-                sigma_t = torch.sqrt(self.test_posterior_variance[t])
 
-                mean = (1.0 / torch.sqrt(alpha_t)) * (
-                    x_t - (beta_t / torch.sqrt(1 - alpha_cum_t)) * eps_theta
+                # estimate x0 from the noise prediction
+                pred_x0 = (x_t - torch.sqrt(1 - alpha_cum_t) * eps_theta) / torch.sqrt(
+                    alpha_cum_t
                 )
+
+                # apply thresholding to keep values in check
+                pred_x0 = self._dynamic_threshold(pred_x0)
+
+                # use the thresholded x0 to find the mean for the next step (x_{t-1})
+                alpha_t = self.test_alphas[t]
+                beta_t = self.test_betas[t]
+                alpha_cum_prev = (
+                    self.test_alphas_cumprod[t - 1]
+                    if t > 0
+                    else torch.tensor(1.0).to(device)
+                )
+
+                # posterior mean coefficients
+                coeff_x0 = (torch.sqrt(alpha_cum_prev) * beta_t) / (1 - alpha_cum_t)
+                coeff_xt = (torch.sqrt(alpha_t) * (1 - alpha_cum_prev)) / (
+                    1 - alpha_cum_t
+                )
+                mean = coeff_x0 * pred_x0 + coeff_xt * x_t
+
+                sigma_t = torch.sqrt(self.test_posterior_variance[t])
                 x_t = mean + sigma_t * torch.randn_like(x_t) if t > 0 else mean
 
             samples.append(x_t.cpu())
         return torch.cat(samples, dim=0)[:num_samples]
+
+    def _dynamic_threshold(
+        self, x0: torch.Tensor, p: float = 0.995, c: float = 1.0
+    ) -> torch.Tensor:
+        """
+        x0: (B, C, H, W) - The predicted clean image
+        p: Percentile (usually 0.995)
+        c: Target threshold (usually 1.0)
+        """
+        batch_size, channels, height, width = x0.shape
+        # Flatten to (batch, pixels) to find quantile per image
+        x_flat = x0.reshape(batch_size, -1)
+
+        # Calculate the s-th percentile of the absolute values
+        s = torch.quantile(torch.abs(x_flat), p, dim=1)
+
+        # Only scale if the s-th percentile is greater than the target threshold 'c'
+        s = torch.clamp(s, min=c).view(batch_size, 1, 1, 1)
+
+        # Clamp to [-s, s] and then divide by s to bring back to [-1, 1]
+        return torch.clamp(x0, -s, s) / s
 
     # -------------------------
     # Forward diffusion q(x_t | x_0)

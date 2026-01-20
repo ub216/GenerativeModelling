@@ -186,7 +186,7 @@ class UNet(nn.Module):
             b, c, h, w = y.shape
             y = y.view(b, c, h * w).permute(0, 2, 1)  # (b, seq_len, c)
             log_once(
-                f"Reshaped bottleneck y to {y.shape} for attention, pos_embed shape: {self.pos_embed.shape}"
+                f"Reshaped bottleneck to {y.shape} for attention, pos_embed shape: {self.pos_embed.shape}"
             )
             curr_pos = self.pos_embed[:, :h, :w, :].reshape(
                 1, h * w, c

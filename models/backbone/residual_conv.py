@@ -21,6 +21,7 @@ class ResidualConv(nn.Module):
         bias: bool = True,
         activation: nn.Module = nn.SiLU(),
         spectral_norm: bool = False,
+        affine: bool = False,
     ):
         super().__init__()
         # standard Convolutions
@@ -37,7 +38,7 @@ class ResidualConv(nn.Module):
             self.conv2 = nn.utils.spectral_norm(self.conv2)
 
         # normalisation layers
-        self.norm = nn.GroupNorm(1, out_channels, affine=False)
+        self.norm = nn.GroupNorm(1, out_channels, affine=affine)
 
         self.act = activation
         self.dropout = nn.Dropout2d(dropout)

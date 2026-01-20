@@ -53,18 +53,22 @@ def save_eval_results(
         if conditioning is not None and conditioning[idx] != "":
             label = str(conditioning[idx])
             # draw text directly on the image
-            img_colored = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-            cv2.putText(
-                img_colored,
+            img_colored = img
+            if sample_channels == 1:
+                img_colored = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+            img_colored = cv2.putText(
+                np.ascontiguousarray(img_colored),
                 label,
-                (2, 6),  # top-left corner
+                (2, 6),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.2,  # font scale
-                (255, 255, 255),  # white text
+                0.2,
+                (255, 255, 255),
                 1,
                 cv2.LINE_AA,
             )
-            img = cv2.cvtColor(img_colored, cv2.COLOR_BGR2GRAY)
+            img = img_colored
+            if sample_channels == 1:
+                img = cv2.cvtColor(img_colored, cv2.COLOR_BGR2GRAY)
         grid_image[
             row * sample_height : (row + 1) * sample_height,
             col * sample_width : (col + 1) * sample_width,

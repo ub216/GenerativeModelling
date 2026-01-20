@@ -14,12 +14,12 @@ model:
     text_emb_dim: null                   # Set to null if CFG not required
     sample_condition_weight: 10
     renormalise: true
-  checkpoint: null                     # Use for evaluation or restarting training
+  checkpoint: null    # Use for evaluation or restarting training
 
 optimizer:                              
   type: "adamw"                          
   params:
-    lr: 0.0001
+    lr: 0.0002
     weight_decay: 0.01
   accumulate_steps: 1                   # Number of steps to accumulate gradients over
   max_grad_norm: 1.0                    # Set to inf to disable gradient clipping  
@@ -48,6 +48,7 @@ loss:
   type: "pair_smooth"                      # options: vae_loss, pair_mse
   params:
     reduction: "mean"
+    beta: 0.1
 
 metrics:
   fid:

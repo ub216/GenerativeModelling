@@ -116,7 +116,12 @@ def main(config_path: str = "config.yaml"):
     if cfg["model"].get("checkpoint", None) is not None:
         ckpt = cfg["model"]["checkpoint"]
         checkpoint = torch.load(ckpt, map_location=cfg["training"]["device"])
-        model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+        if "model_ema_state_dict" in checkpoint:
+            model.load_state_dict(checkpoint["model_ema_state_dict"])
+            logger.info("Loaded EMA weights for evaluation")
+        elif "model_state_dict" in checkpoint:
+            logger.info("Loaded model_state_dict weights for evaluation")
+            model.load_state_dict(checkpoint["model_state_dict"])
         logger.info(f"Loaded model checkpoint from {ckpt}")
     else:
         logger.warning("No checkpoint provided, testing on random weights!")
