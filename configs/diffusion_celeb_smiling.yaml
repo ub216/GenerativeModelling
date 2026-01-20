@@ -1,0 +1,17 @@
+experiment:
+  name: "Generative"
+  seed: 42                               # Random seed for reproducibility
+
+model:
+  type: "diffusion"                     # options: vae, diffusion, flow, etc.
+  params:
+    timesteps: 1000
+    test_timesteps: 1000
+    channel_mults: [1, 2, 4, 8]
+    num_blocks: [1, 2, 2, 2]
+    use_attention: true
+    time_emb_dim: 128
+    text_emb_dim: 128                   # Set to null if CFG not required
+    sample_condition_weight: 10
+    renormalise: true
+  checkpoint: ckpts/diffusion_cfg_smiling.pth     # Use for evaluation or restarting training

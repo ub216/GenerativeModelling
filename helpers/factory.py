@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import torch
 from loguru import logger
@@ -52,10 +52,19 @@ def get_loss_function(cfg: Dict[str, Any]) -> torch.nn.Module:
 
 
 def get_model(
-    cfg: Dict[str, Any], dataloader: torch.utils.data.DataLoader
+    cfg: Dict[str, Any],
+    dataloader: torch.utils.data.DataLoader = None,
+    image_size: Tuple[int, int, int] = None,
 ) -> custom_types.GenBaseModel:
-    example_imgs, _ = next(iter(dataloader))
-    _, c, h, w = example_imgs.shape
+    if image_size is not None:
+        h, w, c = image_size
+    elif dataloader is not None:
+        example_imgs, _ = next(iter(dataloader))
+        _, c, h, w = example_imgs.shape
+    else:
+        raise ValueError(
+            "Either image_size or dataloader must be provided to infer image size."
+        )
     name = cfg["type"].lower()
     params = cfg.get("params", {})
 

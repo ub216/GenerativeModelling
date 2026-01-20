@@ -92,6 +92,10 @@ def eval(
 def main(config_path: str = "config.yaml"):
     parser = argparse.ArgumentParser(description="Evaluate generative model")
     parser.add_argument("--config", type=str, required=True, help="Config file path")
+    parser.add_argument("--image_size", type=int, default=None, help="Model image size")
+    parser.add_argument(
+        "--image_channels", type=int, default=None, help="Model image channels"
+    )
     args = parser.parse_args()
     config_path = args.config
     assert os.path.isfile(config_path), f"Config file {config_path} not found"
@@ -107,12 +111,21 @@ def main(config_path: str = "config.yaml"):
     os.makedirs(run_dir, exist_ok=True)
     shutil.copy(config_path, f"{run_dir}/config.yaml")
 
-    # Setup Dataloader
-    dataloader = get_dataset(cfg["dataset"], cfg["training"].get("batch_size", None))
+    # Setup model
+    if args.image_size is not None and args.image_channels is not None:
+        image_size = (args.image_size, args.image_size, args.image_channels)
+        model = get_model(cfg["model"], dataloader=None, image_size=image_size)
+    elif cfg["dataset"].get("type", None) is not None:
+        dataloader = get_dataset(
+            cfg["dataset"], cfg["training"].get("batch_size", None)
+        )
+        model = get_model(cfg["model"], dataloader=dataloader)
+    else:
+        raise ValueError(
+            "Either dataset type or image_size and image_channels must be provided."
+        )
 
-    # Setup model after dataloader to estimate image_size and
-    # channel dimension. This is required to initiate models
-    model = get_model(cfg["model"], dataloader)
+    # Load checkpoint
     if cfg["model"].get("checkpoint", None) is not None:
         ckpt = cfg["model"]["checkpoint"]
         checkpoint = torch.load(ckpt, map_location=cfg["training"]["device"])

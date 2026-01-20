@@ -17,7 +17,7 @@ This repository provides a set of tools to quickly set up and experiment with ge
 - [x] Add support for CFG in diffusion/flow
 - [x] Add support for CelebA dataset
 - [x] Add DiT blocks
-- [ ] Add some result comparison
+- [x] Add some results
 
 ## Getting Started
 
@@ -66,6 +66,36 @@ After training, evaluate your model using:
 python eval.py --config configs/diffusion.yaml
 ```
 
+### 6. Edit face image to add smile
+This needs [`facenet-pytorch`](https://github.com/timesler/facenet-pytorch) to help detect and algn faces.
+```sh
+pip install --no-deps facenet-pytorch pillow
+```
+
+Then run:
+```sh
+python smile.py --input <path_to_serious_face_image>
+```
+(see the avilable parameters in smile.py to experiment with)
+
+### 7. Results
+#### Results for diffusion model trained on CelebA datasets (64x64).
+You can donwload this model from [here](https://drive.google.com/file/d/1Pb9B6iuZvVoaCEp4_dETjzSAUHu9yRqP/view?usp=sharing)
+
+![Results1](assets/generated_samples.png)
+
+#### Results for CFG based image editing (add smile)
+**Positive example**
+![Results2](assets/comparison_serious_face_2.png)
+
+**Incorrect identity** preservation:
+![Results3](assets/comparison_serious_face_3.png)
+
+### Note: 
+- We use invert then edit here. Could also be extended to SDEdit which adds randomness.
+- Bluriness is because the model was trained on a lower resolution. 
+
+
 ## Repository Structure
 
 - [`train.py`](train.py): Script to train generative models.
@@ -76,6 +106,7 @@ python eval.py --config configs/diffusion.yaml
 - [`metrics/`](metrics/): Evaluation metrics.
 - [`loaders/`](loaders/): Dataset loaders.
 - [`helpers/`](helpers/): Factory functions and classes.
+- [`edit_images/`](edit_images/): Use diffusion model + CFG to edit face images
 
 ## Contributing
 
