@@ -1,0 +1,58 @@
+experiment:
+  name: "Generative"
+  seed: 42                               # Random seed for reproducibility
+
+model:
+  type: "latent_diffusion"                     # options: vae, diffusion, flow, etc.
+  params:
+    timesteps: 1000
+    test_timesteps: 1000
+    channel_mults: [1, 2, 4, 8]
+    num_blocks: [1, 2, 2, 2]
+    use_attention: true
+    time_emb_dim: 128
+    text_emb_dim: 128                   # Set to null if CFG not required
+    sample_condition_weight: 10
+    renormalise: true
+  checkpoint: ckpts/latent_diffusion_cfg_smiling.pth     # Use for evaluation or restarting training
+
+optimizer:                              
+  type: "adamw"                          
+  params:
+    lr: 0.0002
+    weight_decay: 0.01
+  accumulate_steps: 4                   # Number of steps to accumulate gradients over
+  max_grad_norm: 1.0                    # Set to inf to disable gradient clipping  
+
+training:
+  batch_size: 16
+  epochs: 100
+  device: "cuda"
+  metric_interval: 100
+  ema_decay: 0.9999                    # Set to 0 to disable EMA
+  save_after_epoch: 5                # Save all checkpoints after this epoch
+
+evaluation:
+  samples: 100                          # Only used for evaluation run
+    
+dataset:
+  type: "celeb_hq"                         # options: mnist (imagenet, coco, .. in future)
+  params:
+    root: "/data/datasets/CelebA/celeba_hq/"
+    num_workers: 8
+    pin_memory: true
+    persistent_workers: true
+    image_size: [512, 512]
+    attr_target: "smiling"          # Only for CelebA dataset
+
+loss:
+  type: "pair_smooth"                      # options: vae_loss, pair_mse
+  params:
+    reduction: "mean"
+    beta: 1.0
+
+metrics:
+  fid:
+    type: "fid_inception"
+    params: 
+      samples: 8000

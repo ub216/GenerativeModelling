@@ -31,6 +31,8 @@ def get_dataset(cfg: Dict[str, Any], batch_size=None) -> torch.utils.data.DataLo
         return loaders.get_mnist_dataloader(**params)
     elif name == "celeb":
         return loaders.get_celeb_dataloader(**params)
+    elif name == "celeb_hq":
+        return loaders.get_celeb_hq_dataloader(**params)
     else:
         raise ValueError(f"Unknown dataset: {name}")
 
@@ -94,6 +96,8 @@ def get_model(
         return models.DiffusionModel(**params)
     elif name == "flow":
         return models.FlowModel(**params)
+    elif name == "latent_diffusion":
+        return models.LatentDiffusionModel(**params)
     else:
         raise ValueError(f"Unknown model type: {name}")
 

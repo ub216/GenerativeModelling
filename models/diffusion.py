@@ -127,6 +127,7 @@ class DiffusionModel(BaseModel):
         batch_size: int = 16,
         conditioning: Optional[List[str]] = None,
         use_ddim: bool = False,
+        c=1.0,
         *args,
         **kwargs,
     ) -> torch.Tensor:
@@ -150,11 +151,11 @@ class DiffusionModel(BaseModel):
         # Choose sampling logic
         if use_ddim:
             samples = self._sample_ddim(
-                num_samples, device, image_size, batch_size, conditioning, T_test
+                num_samples, device, image_size, batch_size, conditioning, T_test, c=c
             )
         else:
             samples = self._sample_ddpm(
-                num_samples, device, image_size, batch_size, conditioning
+                num_samples, device, image_size, batch_size, conditioning, c=c
             )
 
         self.unet.train()
@@ -164,7 +165,7 @@ class DiffusionModel(BaseModel):
 
     @torch.no_grad()
     def _sample_ddim(
-        self, num_samples, device, image_size, batch_size, conditioning, T_test
+        self, num_samples, device, image_size, batch_size, conditioning, T_test, c
     ):
         # Create the sparse indices for the skip-steps
         times = torch.linspace(
@@ -220,7 +221,7 @@ class DiffusionModel(BaseModel):
                 ) / torch.sqrt(alpha_bar_curr)
 
                 # dynamic thresholding to keep pixel values in check
-                pred_x0 = self._dynamic_threshold(pred_x0)
+                pred_x0 = self._dynamic_threshold(pred_x0, c=c)
 
                 # compute direction pointing to x_t
                 dir_xt = torch.sqrt(1 - alpha_bar_next) * eps_theta
@@ -230,7 +231,9 @@ class DiffusionModel(BaseModel):
         return torch.cat(samples, dim=0)[:num_samples]
 
     @torch.no_grad()
-    def _sample_ddpm(self, num_samples, device, image_size, batch_size, conditioning):
+    def _sample_ddpm(
+        self, num_samples, device, image_size, batch_size, conditioning, c
+    ):
         samples = []
         for idx in range(math.ceil(num_samples / batch_size)):
             cur_bs = min(batch_size, num_samples - len(samples))
@@ -269,7 +272,7 @@ class DiffusionModel(BaseModel):
                 )
 
                 # apply thresholding to keep values in check
-                pred_x0 = self._dynamic_threshold(pred_x0)
+                pred_x0 = self._dynamic_threshold(pred_x0, c=c)
 
                 # use the thresholded x0 to find the mean for the next step (x_{t-1})
                 alpha_t = self.test_alphas[t]
@@ -301,6 +304,8 @@ class DiffusionModel(BaseModel):
         p: Percentile (usually 0.995)
         c: Target threshold (usually 1.0)
         """
+        if c == float("inf"):
+            return x0
         batch_size, channels, height, width = x0.shape
         # Flatten to (batch, pixels) to find quantile per image
         x_flat = x0.reshape(batch_size, -1)

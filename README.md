@@ -18,6 +18,8 @@ This repository provides a set of tools to quickly set up and experiment with ge
 - [x] Add support for CelebA dataset
 - [x] Add DiT blocks
 - [x] Add some results
+- [x] Add latent diffusion model
+- [ ] Create a Gradio app for editing smile
 
 ## Getting Started
 

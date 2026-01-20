@@ -14,13 +14,8 @@ from tqdm import tqdm
 import helpers.custom_types as custom_types
 import metrics
 import wandb
-from helpers.factory import (
-    get_dataset,
-    get_loss_function,
-    get_metrics,
-    get_model,
-    get_optimizer_manager,
-)
+from helpers.factory import (get_dataset, get_loss_function, get_metrics,
+                             get_model, get_optimizer_manager)
 from helpers.optimizer_manager import OptimizerManager
 from helpers.utils import drop_condition, save_eval_results
 from models.ema import EMAModel
@@ -42,9 +37,9 @@ def train_one_epoch(
     model.train()
     total_loss = defaultdict(float)
     pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}", leave=False)
+    optimizer_manager.zero_grad()
 
     for idx, (inputs, labels) in enumerate(pbar):
-        optimizer_manager.zero_grad()
 
         inputs = inputs.to(device, non_blocking=True)
 
@@ -69,6 +64,7 @@ def train_one_epoch(
 
         metrics = optimizer_manager.step()
         if metrics:
+            optimizer_manager.zero_grad()
             wandb.log(metrics, step=epoch * len(dataloader) + idx)
             # Update EMA model
             model_ema.update(model)
@@ -182,7 +178,7 @@ def train(
         # Generate samples for monitoring
         eval_sample(
             model,
-            num_samples=16,
+            num_samples=9,
             device=device,
             image_size=dataloader.image_size,
             step=(epoch + 1) * len(dataloader),
@@ -192,7 +188,7 @@ def train(
         )
         eval_sample(
             model_ema,
-            num_samples=16,
+            num_samples=9,
             device=device,
             image_size=dataloader.image_size,
             step=(epoch + 1) * len(dataloader),
@@ -228,7 +224,7 @@ def train(
                     "fid": curr_score,
                 }
                 torch.save(checkpoint, f"{save_dir}/best_{epoch+1}.pth")
-        if save_after_epoch <= epoch:
+        if epoch % save_after_epoch == 0:
             # Save last model
             checkpoint = {
                 "epoch": epoch,

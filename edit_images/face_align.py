@@ -141,39 +141,3 @@ class FaceAligner:
 
         composite = (mask_w * warped_edit + (1 - mask_w) * orig_rgb).astype(np.uint8)
         return _to_bgr_uint8(composite)
-
-
-def build_target_landmark_template_from_aligned_images(
-    image_paths: list[str],
-    image_size: int = 64,
-    device: str = "cuda",
-    max_images: int = 2000,
-) -> np.ndarray:
-    """
-    Recommended: compute mean 5-pt landmark positions *in your aligned training distribution*,
-    then use that as the canonical template for alignment at inference.
-
-    Returns: (5,2) float32 in [0, image_size) coords.
-    """
-    mtcnn = MTCNN(keep_all=False, post_process=False, device=device)
-    pts = []
-    n = min(len(image_paths), max_images)
-
-    for p in image_paths[:n]:
-        bgr = cv2.imread(p)
-        if bgr is None:
-            continue
-        rgb = _to_rgb_uint8(bgr)
-        # resize to your training size before landmark detection
-        rgb64 = cv2.resize(rgb, (image_size, image_size), interpolation=cv2.INTER_AREA)
-
-        _, _, lms = mtcnn.detect(rgb64, landmarks=True)
-        if lms is None:
-            continue
-        pts.append(lms[0].astype(np.float32))  # (5,2)
-
-    if len(pts) < 50:
-        raise RuntimeError(f"Too few faces detected for template: {len(pts)}")
-
-    template = np.mean(np.stack(pts, axis=0), axis=0).astype(np.float32)
-    return template

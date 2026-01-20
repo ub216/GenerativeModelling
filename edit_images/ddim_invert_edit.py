@@ -115,7 +115,7 @@ def ddim_edit_from_noise(
     cfg_schedule: Callable[[int, int], float],  # (step_idx, num_steps) -> scale
 ) -> torch.Tensor:
     """
-    Deterministic DDIM reverse starting from x_T using your skip schedule.
+    Deterministic DDIM reverse starting from x_T using skip schedule.
     """
     model.unet.eval()
 

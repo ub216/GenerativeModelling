@@ -7,16 +7,11 @@ import numpy as np
 import torch
 import yaml
 
-from edit_images.ddim_invert_edit import (
-    ddim_edit_from_noise,
-    ddim_invert,
-    linear_cfg_ramp,
-    make_ddim_time_pairs,
-)
+from edit_images.ddim_invert_edit import (ddim_edit_from_noise, ddim_invert,
+                                          linear_cfg_ramp,
+                                          make_ddim_time_pairs)
 from edit_images.face_align import (
-    FaceAligner,
-    build_target_landmark_template_from_aligned_images,
-)
+    FaceAligner, build_target_landmark_template_from_aligned_images)
 from helpers.factory import get_model
 from models.base_model import BaseModel
 
