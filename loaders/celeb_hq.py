@@ -117,13 +117,13 @@ def get_celeb_hq_dataloader(
     dataset = CelebAHQDataset(root=root, transform=transform, attr_target=attr_target)
 
     dataloader = DataLoader(
-            dataset,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
-            persistent_workers=persistent_workers,
-            drop_last=True,
-        )
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=persistent_workers,
+        drop_last=True,
+    )
     dataloader.image_size = image_size
     return dataloader

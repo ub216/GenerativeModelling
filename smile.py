@@ -1,5 +1,6 @@
 import argparse
 import os
+from typing import Tuple
 
 import cv2
 import matplotlib.pyplot as plt
@@ -10,8 +11,8 @@ import yaml
 from edit_images.ddim_invert_edit import (ddim_edit_from_noise, ddim_invert,
                                           linear_cfg_ramp,
                                           make_ddim_time_pairs)
-from edit_images.face_align import (
-    FaceAligner, build_target_landmark_template_from_aligned_images)
+from edit_images.face_align import FaceAligner
+from edit_images.face_verifier import FaceVerifier
 from helpers.factory import get_model
 from models.base_model import BaseModel
 
@@ -38,11 +39,12 @@ def postprocess_from_model(x: torch.Tensor, renormalise: bool) -> np.ndarray:
 def edit_smile(
     model: BaseModel,
     aligner: FaceAligner,
+    verifier: FaceVerifier,
     input_bgr_path: str,
     prompt: str,
     T_test: int = 50,
     step_percent: float = 0.4,
-) -> np.ndarray:
+) -> Tuple[np.ndarray, float]:
     bgr = cv2.imread(input_bgr_path)
 
     # detect face, align
@@ -74,7 +76,8 @@ def edit_smile(
 
     edited_aligned_rgb = postprocess_from_model(x_edit, renormalise=model.renormalise)
     out_bgr = aligner.unalign_and_paste(edited_aligned_rgb, bgr, meta, feather=10)
-    return out_bgr
+    similarity = verifier.get_similarity(aligned_rgb, edited_aligned_rgb)
+    return out_bgr, similarity
 
 
 if __name__ == "__main__":
@@ -135,20 +138,25 @@ if __name__ == "__main__":
     model = model.to("cuda")
 
     aligner = FaceAligner(image_size=args.image_size, device="cuda")
+    verifier = FaceVerifier(device="cuda")
 
-    out = edit_smile(
+    out, sim_score = edit_smile(
         model,
         aligner,
+        verifier,
         args.input,
         prompt=args.prompt,
         T_test=args.T_test,
         step_percent=args.step_percent,
     )
+    print(f"Face similarity (higher is better): {sim_score:.4f}")
     plt.subplot(1, 2, 1)
+    plt.axis("off")
     plt.imshow(cv2.cvtColor(cv2.imread(args.input), cv2.COLOR_BGR2RGB))
     plt.title("Input")
     plt.subplot(1, 2, 2)
-    plt.title("Edited")
+    plt.axis("off")
+    plt.title(f"Prompt: {args.prompt} \n Similarity: {sim_score:.4f} (using FaceNet)")
     plt.imshow(cv2.cvtColor(out, cv2.COLOR_BGR2RGB))
 
     plt.tight_layout()

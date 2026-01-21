@@ -88,6 +88,7 @@ You can donwload this model from [here](https://drive.google.com/file/d/1Pb9B6iu
 
 #### Results for CFG based image editing (add smile)
 **Positive example**
+![Results1](assets/comparison_serious_face.png)
 ![Results2](assets/comparison_serious_face_2.png)
 
 **Incorrect identity** preservation:
