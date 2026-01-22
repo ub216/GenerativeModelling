@@ -2,6 +2,8 @@
 
 This repository provides a set of tools to quickly set up and experiment with generative modelling. It includes easy-to-use scripts and configuration files, enabling users to run experiments with various generative models with minimal setup.
 
+As an example of its usage, we demonstrate image-to-video generation for facial attribute editing, converting a single neutral face image into a temporally consistent sequence with progressively increasing smile strength.
+
 ## Features
 
 - Modular codebase for generative models (Diffusion, VAE, etc.)
@@ -94,12 +96,11 @@ You can donwload this model from [here](https://drive.google.com/file/d/1Pb9B6iu
 **Incorrect identity** preservation:
 ![Results1](assets/comparison_serious_face.png)
 
+
 #### Results for converting single image to a video of progressively smiling preson using temporal guidance
 |  |  |  |
 |---|---|---|
 | <img src="assets/serious_face_progression_inf.gif" width="250"> | <img src="assets/serious_face_2_progression_inf.gif" width="250"> | <img src="assets/serious_face_3_progression_inf.gif" width="250"> |
-
-
 
 ### Note: 
 - We use invert then edit here. Could also be extended to SDEdit which adds randomness.
