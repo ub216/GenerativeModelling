@@ -7,3 +7,6 @@ scipy
 opencv-python
 loguru
 transformers
+diffusers --no-deps
+facenet-pytorch --no-deps
+imageio

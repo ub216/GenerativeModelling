@@ -105,7 +105,8 @@ def ddim_invert(
     return x_t
 
 
-@torch.no_grad()
+# The function signature now accepts a guidance_fn that takes 4 arguments:
+# x_in, x0_pred, current_step_index, total_steps.
 def ddim_edit_from_noise(
     model,
     x_T: torch.Tensor,  # (1,C,H,W)
@@ -113,6 +114,9 @@ def ddim_edit_from_noise(
     dec_pairs: List[Tuple[int, int]],
     device: str,
     cfg_schedule: Callable[[int, int], float],  # (step_idx, num_steps) -> scale
+    guidance_fn: Optional[
+        Callable[[torch.Tensor, torch.Tensor, int, int], torch.Tensor]
+    ] = None,
 ) -> torch.Tensor:
     """
     Deterministic DDIM reverse starting from x_T using skip schedule.
@@ -125,7 +129,10 @@ def ddim_edit_from_noise(
     for i, (t_curr, t_next) in enumerate(dec_pairs):
         t_batch = torch.full((x_t.shape[0],), t_curr, device=device, dtype=torch.long)
         cfg = float(cfg_schedule(i, num_steps))
-        eps = predict_eps_cfg(model, x_t, t_batch, conditioning, cfg_scale=cfg)
+
+        # 1. Standard Noise Prediction (no grad)
+        with torch.no_grad():
+            eps = predict_eps_cfg(model, x_t, t_batch, conditioning, cfg_scale=cfg)
 
         a_t = model.train_alphas_cumprod[t_curr]
         a_next = (
@@ -134,13 +141,39 @@ def ddim_edit_from_noise(
             else torch.tensor(1.0, device=device)
         )
 
-        x_t = ddim_step(
-            x_t,
-            eps,
-            a_t,
-            a_next,
-            dynamic_threshold_fn=None,  # model._dynamic_threshold,
-        )
+        # guidance Step
+        # The code calculates correction gradients if a guidance function is provided.
+        if guidance_fn is not None:
+            # enable gradient tracking for x_t temporarily
+            x_in = x_t.detach().requires_grad_(True)
+
+            # Approximate x0 from x_in and fixed eps
+            pred_x0_grad = (x_in - torch.sqrt(1.0 - a_t) * eps) / torch.sqrt(a_t)
+
+            # The guidance function is called with the current step index 'i'
+            # and 'num_steps' to allow for temporal ramping of the loss.
+            loss = guidance_fn(x_in, pred_x0_grad, i, num_steps)
+
+            if loss is not None and loss.requires_grad:
+                grad = torch.autograd.grad(loss, x_in)[0]
+
+                # Update eps: eps_new = eps - sqrt(1 - a_t) * grad
+                sigma_t = torch.sqrt(1.0 - a_t)
+                eps = eps + sigma_t * grad
+                print(
+                    f"Step {i+1}/{num_steps}: Applied guidance with loss {loss.item():.4f}, grad norm {grad.norm().item():.4f}, sigma_t {sigma_t.item():.4f}"
+                )
+
+        # step
+        with torch.no_grad():
+            x_t = ddim_step(
+                x_t,
+                eps,
+                a_t,
+                a_next,
+                dynamic_threshold_fn=None,  # model._dynamic_threshold,
+            )
+
     return x_t
 
 

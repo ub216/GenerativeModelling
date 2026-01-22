@@ -88,11 +88,18 @@ You can donwload this model from [here](https://drive.google.com/file/d/1Pb9B6iu
 
 #### Results for CFG based image editing (add smile)
 **Positive example**
-![Results1](assets/comparison_serious_face.png)
 ![Results2](assets/comparison_serious_face_2.png)
+![Results3](assets/comparison_serious_face_3.png)
 
 **Incorrect identity** preservation:
-![Results3](assets/comparison_serious_face_3.png)
+![Results1](assets/comparison_serious_face.png)
+
+#### Results for converting single image to a video of progressively smiling preson using temporal guidance
+|  |  |  |
+|---|---|---|
+| <img src="assets/serious_face_progression_inf.gif" width="250"> | <img src="assets/serious_face_2_progression_inf.gif" width="250"> | <img src="assets/serious_face_3_progression_inf.gif" width="250"> |
+
+
 
 ### Note: 
 - We use invert then edit here. Could also be extended to SDEdit which adds randomness.

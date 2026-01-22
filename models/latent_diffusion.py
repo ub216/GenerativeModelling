@@ -30,8 +30,7 @@ class LatentDiffusionModel(BaseModel):
         super().__init__()
         self.device = device
 
-        # 1. Load the Pre-trained VAE
-        # This VAE expects 256x256 and produces 32x32x4 latents
+        # load the Pre-trained VAE
         self.vae = AutoencoderKL.from_pretrained(vae_model_name).to(device)
         self.renormalise = renormalise
 
@@ -164,4 +163,6 @@ class LatentDiffusionModel(BaseModel):
         # Map from [-1, 1] (VAE output) to [0, 1] for visualization
         if self.renormalise:
             samples = (samples + 1.0) / 2.0
+
+        self.model.train()
         return samples.clamp(0.0, 1.0)

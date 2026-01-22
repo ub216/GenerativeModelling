@@ -106,7 +106,7 @@ class GAN(BaseModel):
             discriminator_reduced_size * discriminator_reduced_size * prev_ch
         )
 
-        # Change the last layer based on your required GAN type/loss.
+        # Change the last layer based on required GAN type/loss.
         # For hinge loss Linear O/P is recommended
         dis_blocks.append(nn.Linear(discriminator_reduced_size, 1))
         self.discriminator = nn.Sequential(*dis_blocks)
