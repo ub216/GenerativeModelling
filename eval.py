@@ -114,12 +114,14 @@ def main(config_path: str = "config.yaml"):
     # Setup model
     if args.image_size is not None and args.image_channels is not None:
         image_size = (args.image_size, args.image_size, args.image_channels)
-        model = get_model(cfg["model"], dataloader=None, image_size=image_size)
+        model, _ = get_model(
+            cfg["model"], dataloader=None, image_size=image_size, build_ema=False
+        )
     elif cfg["dataset"].get("type", None) is not None:
         dataloader = get_dataset(
             cfg["dataset"], cfg["training"].get("batch_size", None)
         )
-        model = get_model(cfg["model"], dataloader=dataloader)
+        model, _ = get_model(cfg["model"], dataloader=dataloader, build_ema=False)
     else:
         raise ValueError(
             "Either dataset type or image_size and image_channels must be provided."

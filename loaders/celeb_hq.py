@@ -6,6 +6,7 @@ import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
+from torchvision.transforms import InterpolationMode
 
 
 class CelebAHQDataset(Dataset):
@@ -108,9 +109,28 @@ def get_celeb_hq_dataloader(
     # Preprocessing for Latent Diffusion
     transform = transforms.Compose(
         [
+            # GEOMETRIC ROBUSTNESS (Zoom In, Zoom Out, Shift, Rotate)
+            transforms.RandomAffine(
+                degrees=5,  # Robust to tilted heads
+                translate=(0.05, 0.05),  # Robust to off-center faces
+                scale=(
+                    0.9,
+                    1.1,
+                ),  # ZOOM: 0.8 = Zoom Out (20% smaller), 1.2 = Zoom In (20% larger)
+                shear=1,  # Slight perspective skew
+                interpolation=InterpolationMode.BILINEAR,
+                fill=127,  # Fills "Zoom Out" borders with neutral gray (before normalization)
+            ),
+            # ALIGNMENT & FRAMING
             transforms.Resize(image_size),
             transforms.RandomHorizontalFlip(p=0.5),
-            transforms.ToTensor(),  # Maps to [0, 1]
+            # PHOTOMETRIC ROBUSTNESS (Lighting & Quality)
+            transforms.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.1),
+            transforms.RandomApply(
+                [transforms.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 1.0))], p=0.1
+            ),  # Simulates slightly blurry or "inverted" real-world photos
+            # LDM PREPARATION
+            transforms.ToTensor(),  # Scales to [0, 1]
         ]
     )
 

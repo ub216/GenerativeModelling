@@ -14,11 +14,15 @@ from tqdm import tqdm
 import helpers.custom_types as custom_types
 import metrics
 import wandb
-from helpers.factory import (get_dataset, get_loss_function, get_metrics,
-                             get_model, get_optimizer_manager)
+from helpers.factory import (
+    get_dataset,
+    get_loss_function,
+    get_metrics,
+    get_model,
+    get_optimizer_manager,
+)
 from helpers.optimizer_manager import OptimizerManager
 from helpers.utils import drop_condition, save_eval_results
-from models.ema import EMAModel
 
 
 # -----------------------------
@@ -26,7 +30,7 @@ from models.ema import EMAModel
 # -----------------------------
 def train_one_epoch(
     model: custom_types.GenBaseModel,
-    model_ema: EMAModel,
+    model_ema: custom_types.GenEMAModel,
     dataloader: torch.utils.data.DataLoader,
     optimizer_manager: OptimizerManager,
     criterion: torch.nn.Module,
@@ -153,7 +157,7 @@ def eval_sample(
 # -----------------------------
 def train(
     model: custom_types.GenBaseModel,
-    model_ema: EMAModel,
+    model_ema: custom_types.GenEMAModel,
     dataloader: torch.utils.data.DataLoader,
     optimizer_manager: OptimizerManager,
     criterion: torch.nn.Module,
@@ -274,12 +278,9 @@ def main(config_path: str = "config.yaml"):
 
     # Setup model after dataloader to estimate image_size and
     # channel dimension. This is required to initiate models
-    model = get_model(cfg["model"], dataloader)
-
-    # Create EMA model for stable sampling
-    model_ema = EMAModel(
-        model,
-        decay=cfg["training"].get("ema_decay", 0),  # 0 means no EMA
+    # Also initialise EMA model for stable sampling
+    model, model_ema = get_model(
+        cfg["model"], dataloader, ema_decay=cfg["training"].get("ema_decay", 0)
     )
 
     model.to(cfg["training"]["device"])

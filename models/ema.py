@@ -6,13 +6,15 @@ from models.base_model import BaseModel
 
 
 class EMAModel(BaseModel):
-    def __init__(self, model, decay=0.999):
+    def __init__(self, model_ema, decay=0.999):
         super().__init__()
-        self.model = copy.deepcopy(model)
+        self.model = model_ema
         self.model.eval()
         self.decay = decay
-        self.device = next(model.parameters()).device
+        self.device = next(model_ema.parameters()).device
         self.model.to(self.device)
+        for param in self.model.parameters():
+            param.requires_grad = False
 
     @torch.no_grad()
     def update(self, online_model):

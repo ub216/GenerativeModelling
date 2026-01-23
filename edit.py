@@ -9,9 +9,13 @@ import numpy as np
 import torch
 import yaml
 
-from edit_images.ddim_invert_edit import (ddim_edit_from_noise, ddim_invert,
-                                          linear_cfg_ramp,
-                                          make_ddim_time_pairs)
+from edit_images.ddim_edit import (
+    ddim_edit_from_noise,
+    ddim_invert,
+    linear_cfg_ramp,
+    make_ddim_time_pairs,
+    sdedit_add_noise,
+)
 from edit_images.face_align import FaceAligner
 from edit_images.face_verifier import FaceVerifier
 from helpers.factory import get_model
@@ -45,6 +49,7 @@ def edit_smile(
     T_test: int = 50,
     step_percent: float = 0.4,
     id_scale: float = 0.0,
+    edit_mode: str = "invert",
 ) -> Tuple[np.ndarray, float]:
     bgr = cv2.imread(input_bgr_path)
 
@@ -61,11 +66,19 @@ def edit_smile(
     # slice them to only include the first 40% of the steps
     num_steps = int(len(full_inc) * step_percent)
 
-    inc_pairs = full_inc[:num_steps]
-    dec_pairs = full_dec[-num_steps:]
-    xT = ddim_invert(model, x0, inv_cond, inc_pairs=inc_pairs, device="cuda")
+    if edit_mode == "invert":
+        # Inversion: Deterministic mapping to noise
+        inv_cond = [""] if model.has_conditional_generation else None
+        inc_pairs = full_inc[:num_steps]
+        xT = ddim_invert(model, x0, inv_cond, inc_pairs=inc_pairs, device="cuda")
+    else:
+        # SDEdit: Stochastic addition of noise
+        # The starting timestep index for denoising
+        t_start_idx = full_inc[num_steps - 1][1]
+        xT = sdedit_add_noise(x0, t_start_idx, model, device="cuda")
 
     # edit with smile conditioning + CFG ramp
+    dec_pairs = full_dec[-num_steps:]
     edit_cond = [prompt] if model.has_conditional_generation else None
     cfg_sched = linear_cfg_ramp(cfg_start=1.5, cfg_end=model.sample_condition_weight)
 
@@ -254,6 +267,7 @@ if __name__ == "__main__":
         default=100.0,
         help="Temporal guidance scale for video",
     )
+    parser.add_argument("--edit_mode", type=str, default="invert", help="Edit mode")
 
     args = parser.parse_args()
 
@@ -267,8 +281,11 @@ if __name__ == "__main__":
         cfg = yaml.safe_load(f)
 
     # Setup model
-    model = get_model(
-        cfg["model"], None, image_size=(args.image_size, args.image_size, 3)
+    model, _ = get_model(
+        cfg["model"],
+        None,
+        image_size=(args.image_size, args.image_size, 3),
+        build_ema=False,
     )
 
     if cfg["model"].get("checkpoint", None) is not None:
@@ -301,6 +318,7 @@ if __name__ == "__main__":
             T_test=args.T_test,
             step_percent=args.step_percent,
             id_scale=args.id_scale,
+            edit_mode=args.edit_mode,
         )
         print(f"Face similarity: {sim_score:.4f}")
         plt.subplot(1, 2, 1)

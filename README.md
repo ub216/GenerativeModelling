@@ -11,6 +11,7 @@ As an example of its usage, we demonstrate image-to-video generation for facial 
 - Ready-to-use training and evaluation scripts
 - Extensible support for datasets (see [`loaders/`](loaders/))
 - Extensible loss and metric modules
+- Sampling with conditional guidance 
 
 ## TODOs
 - [x] Add support for diffusion network
@@ -19,8 +20,9 @@ As an example of its usage, we demonstrate image-to-video generation for facial 
 - [x] Add support for CFG in diffusion/flow
 - [x] Add support for CelebA dataset
 - [x] Add DiT blocks
-- [x] Add some results
 - [x] Add latent diffusion model
+- [ ] Add multi-gpu training support
+- [x] Add some results
 - [ ] Create a Gradio app for editing smile
 
 ## Getting Started
@@ -71,7 +73,7 @@ python eval.py --config configs/diffusion.yaml
 ```
 
 ### 6. Edit face image to add smile
-This needs [`facenet-pytorch`](https://github.com/timesler/facenet-pytorch) to help detect and algn faces.
+This needs [`facenet-pytorch`](https://github.com/timesler/facenet-pytorch) to help detect and align faces.
 ```sh
 pip install --no-deps facenet-pytorch pillow
 ```
@@ -93,12 +95,12 @@ You can donwload this model from [here](https://drive.google.com/file/d/1Pb9B6iu
 ![Results2](assets/comparison_serious_face_2.png)
 ![Results3](assets/comparison_serious_face_3.png)
 
-**Incorrect identity** preservation:
+**Incorrect identity** preservation due to high guidance scale in CFG:
 ![Results1](assets/comparison_serious_face.png)
 
 
 #### Results for converting single image to a video of progressively smiling preson using temporal guidance
-|  |  |  |
+|  |  | Unnatural progression|
 |---|---|---|
 | <img src="assets/serious_face_progression_inf.gif" width="250"> | <img src="assets/serious_face_2_progression_inf.gif" width="250"> | <img src="assets/serious_face_3_progression_inf.gif" width="250"> |
 
@@ -117,7 +119,7 @@ You can donwload this model from [here](https://drive.google.com/file/d/1Pb9B6iu
 - [`metrics/`](metrics/): Evaluation metrics.
 - [`loaders/`](loaders/): Dataset loaders.
 - [`helpers/`](helpers/): Factory functions and classes.
-- [`edit_images/`](edit_images/): Use diffusion model + CFG to edit face images
+- [`edit_images/`](edit_images/): Use diffusion model with guidance (CFG and classifier based) to edit face images
 
 ## Contributing
 

@@ -5,7 +5,7 @@ import torch
 from loguru import logger
 
 import helpers.custom_types as custom_types
-from helpers.utils import drop_condition
+from helpers.utils import drop_condition, log_once
 from models.backbone.unet import UNet
 from models.base_model import BaseModel
 
@@ -113,7 +113,13 @@ class DiffusionModel(BaseModel):
 
         x_noisy = self.q_sample(x0, time_steps, noise, mode="train")
         predicted_noise, _ = self.unet(x_noisy, time_steps, conditioning=conditioning)
-        return predicted_noise, noise
+
+        # TODO: SNR-weighted loss add as a config option
+        # Compute SNR-weighted MSE loss weights
+        # alphas_cumprod = self.train_alphas_cumprod[time_steps]
+        # snr = alphas_cumprod / (1 - alphas_cumprod).clamp(min=1e-7)
+        # mse_loss_weights = torch.stack([snr, torch.ones_like(snr) * 5.0], dim=1).min(dim=1)[0]
+        return predicted_noise, noise  # , mse_loss_weights
 
     # -------------------------
     # Sampling (ancestral reverse diffusion)
@@ -127,7 +133,9 @@ class DiffusionModel(BaseModel):
         batch_size: int = 16,
         conditioning: Optional[List[str]] = None,
         use_ddim: bool = False,
-        c=1.0,
+        dynamic_threshold: bool = True,
+        threshold_coeff: float = 1.0,
+        clamp_output=True,
         *args,
         **kwargs,
     ) -> torch.Tensor:
@@ -151,21 +159,44 @@ class DiffusionModel(BaseModel):
         # Choose sampling logic
         if use_ddim:
             samples = self._sample_ddim(
-                num_samples, device, image_size, batch_size, conditioning, T_test, c=c
+                num_samples,
+                device,
+                image_size,
+                batch_size,
+                conditioning,
+                T_test,
+                dynamic_threshold=dynamic_threshold,
+                threshold_coeff=threshold_coeff,
             )
         else:
             samples = self._sample_ddpm(
-                num_samples, device, image_size, batch_size, conditioning, c=c
+                num_samples,
+                device,
+                image_size,
+                batch_size,
+                conditioning,
+                dynamic_threshold=dynamic_threshold,
+                threshold_coeff=threshold_coeff,
             )
 
         self.unet.train()
         if self.renormalise:
             samples = (samples + 1.0) / 2.0
-        return samples.clamp(0.0, 1.0)
+        if clamp_output:
+            samples = samples.clamp(0.0, 1.0)
+        return samples
 
     @torch.no_grad()
     def _sample_ddim(
-        self, num_samples, device, image_size, batch_size, conditioning, T_test, c
+        self,
+        num_samples: int,
+        device: torch.device,
+        image_size: Tuple[int, int],
+        batch_size: int,
+        conditioning: Optional[List[str]],
+        T_test: int,
+        dynamic_threshold: bool,
+        threshold_coeff: float,
     ):
         # Create the sparse indices for the skip-steps
         times = torch.linspace(
@@ -221,19 +252,29 @@ class DiffusionModel(BaseModel):
                 ) / torch.sqrt(alpha_bar_curr)
 
                 # dynamic thresholding to keep pixel values in check
-                pred_x0 = self._dynamic_threshold(pred_x0, c=c)
+                if dynamic_threshold:
+                    pred_x0 = self._dynamic_threshold(pred_x0, c=threshold_coeff)
+                else:
+                    pred_x0 = pred_x0.clamp(-threshold_coeff, threshold_coeff)
 
                 # compute direction pointing to x_t
                 dir_xt = torch.sqrt(1 - alpha_bar_next) * eps_theta
                 x_t = torch.sqrt(alpha_bar_next) * pred_x0 + dir_xt
 
-            samples.append(x_t.cpu())
+            samples.append(x_t)
         return torch.cat(samples, dim=0)[:num_samples]
 
     @torch.no_grad()
     def _sample_ddpm(
-        self, num_samples, device, image_size, batch_size, conditioning, c
-    ):
+        self,
+        num_samples: int,
+        device: torch.device,
+        image_size: Tuple[int, int],
+        batch_size: int,
+        conditioning: Optional[List[str]],
+        dynamic_threshold: bool,
+        threshold_coeff: float,
+    ) -> torch.Tensor:
         samples = []
         for idx in range(math.ceil(num_samples / batch_size)):
             cur_bs = min(batch_size, num_samples - len(samples))
@@ -266,13 +307,25 @@ class DiffusionModel(BaseModel):
 
                 alpha_cum_t = self.test_alphas_cumprod[t]
 
-                # estimate x0 from the noise prediction
-                pred_x0 = (x_t - torch.sqrt(1 - alpha_cum_t) * eps_theta) / torch.sqrt(
-                    alpha_cum_t
-                )
+                if alpha_cum_t < 1e-7:
+                    # At extreme noise, the model's prediction is unreliable for x0 reconstruction
+                    # We can approximate pred_x0 as 0 or a very small value to prevent explosion
+                    pred_x0 = torch.zeros_like(x_t)
+                    log_once(f"Warning: Extremely low alpha_cum_t at t = {t}")
+                else:
+                    sqrt_alpha_cum_t = torch.sqrt(alpha_cum_t).clamp(min=1e-12)
+                    sqrt_one_minus_alpha_cum_t = torch.sqrt(1 - alpha_cum_t)
+
+                    # estimate x0 from the noise prediction
+                    pred_x0 = (
+                        x_t - sqrt_one_minus_alpha_cum_t * eps_theta
+                    ) / sqrt_alpha_cum_t
 
                 # apply thresholding to keep values in check
-                pred_x0 = self._dynamic_threshold(pred_x0, c=c)
+                if dynamic_threshold:
+                    pred_x0 = self._dynamic_threshold(pred_x0, c=threshold_coeff)
+                else:
+                    pred_x0 = pred_x0.clamp(-threshold_coeff, threshold_coeff)
 
                 # use the thresholded x0 to find the mean for the next step (x_{t-1})
                 alpha_t = self.test_alphas[t]
@@ -282,18 +335,18 @@ class DiffusionModel(BaseModel):
                     if t > 0
                     else torch.tensor(1.0).to(device)
                 )
+                # At t=0, (1 - alpha_cum_t) becomes very small (~4e-5).
+                # We clamp the denominator to prevent the final latent from blowing up.
+                denom = (1 - alpha_cum_t).clamp(min=1e-7)
 
                 # posterior mean coefficients
-                coeff_x0 = (torch.sqrt(alpha_cum_prev) * beta_t) / (1 - alpha_cum_t)
-                coeff_xt = (torch.sqrt(alpha_t) * (1 - alpha_cum_prev)) / (
-                    1 - alpha_cum_t
-                )
+                coeff_x0 = (torch.sqrt(alpha_cum_prev) * beta_t) / denom
+                coeff_xt = (torch.sqrt(alpha_t) * (1 - alpha_cum_prev)) / denom
                 mean = coeff_x0 * pred_x0 + coeff_xt * x_t
 
                 sigma_t = torch.sqrt(self.test_posterior_variance[t])
                 x_t = mean + sigma_t * torch.randn_like(x_t) if t > 0 else mean
-
-            samples.append(x_t.cpu())
+            samples.append(x_t)
         return torch.cat(samples, dim=0)[:num_samples]
 
     def _dynamic_threshold(
@@ -355,41 +408,48 @@ class DiffusionModel(BaseModel):
 def prepare_noise_schedule(
     num_timesteps: int, schedule_type: str = "cosine"
 ) -> Dict[str, torch.Tensor]:
+    # Use float64 for schedule generation to avoid precision drift
     if schedule_type == "linear":
-        betas = torch.linspace(1e-4, 0.02, num_timesteps)
+        betas = torch.linspace(1e-4, 0.02, num_timesteps, dtype=torch.float64)
         alphas_cumprod = torch.cumprod(1.0 - betas, dim=0)
-
     elif schedule_type == "cosine":
-        # Cosine schedule: alpha_bar(t) = cos^2((t/T + s) / (1 + s) * pi / 2)
-        s = 0.008
-        steps = num_timesteps + 1
-        x = torch.linspace(0, num_timesteps, steps)
-
+        s = 0.02
+        x = torch.linspace(0, num_timesteps, num_timesteps + 1, dtype=torch.float64)
+        # Standard Improved DDPM cosine curve
         alphas_cumprod = (
             torch.cos(((x / num_timesteps) + s) / (1 + s) * math.pi * 0.5) ** 2
         )
-        alphas_cumprod = alphas_cumprod / alphas_cumprod[0]  # Normalize
-
-        # Calculate betas from alphas_cumprod: beta(t) = 1 - alpha_bar(t) / alpha_bar(t-1)
+        alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
+        # Calculate betas from the curve
         betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
-        betas = torch.clip(betas, 0.0, 0.999)  # Prevent singularities
-
+        betas = torch.clip(betas, 0.0001, 0.999)  # Clip min to avoid no-op steps
+        # Use the original curve values for better precision
+        alphas_cumprod = alphas_cumprod[1:]
     else:
         raise ValueError(f"Unknown schedule type: {schedule_type}")
 
     alphas = 1.0 - betas
-    alphas_cumprod = torch.cumprod(alphas, dim=0)
-    alphas_cumprod_prev = torch.cat([torch.ones(1), alphas_cumprod[:-1]])
+    alphas_cumprod_prev = torch.cat(
+        [torch.ones(1, dtype=torch.float64), alphas_cumprod[:-1]]
+    )
 
-    # Posterior Variance (Small Variance)
-    # This calculation is the same regardless of the beta schedule type
-    posterior_variance = betas * (1.0 - alphas_cumprod_prev) / (1.0 - alphas_cumprod)
+    # --- STABILITY FIX FOR LATENT DIFFUSION ---
+    # The denominator (1 - alphas_cumprod) approaches 0 as t approaches 0 (alphas_cumprod -> 1).
+    # We clamp the denominator to prevent the posterior variance from becoming infinite/NaN.
+    # We also clamp the numerator to ensure non-negative variance.
+    denom = (1.0 - alphas_cumprod).clamp(min=1e-12)
+    posterior_variance = betas * (1.0 - alphas_cumprod_prev).clamp(min=0) / denom
 
+    logger.info(
+        f"SNR range: {((alphas_cumprod / (1 - alphas_cumprod)).sqrt()).min()} to {((alphas_cumprod / (1 - alphas_cumprod)).sqrt()).max()}"
+    )
+
+    # Cast back to float32 only at the end
     return {
-        "betas": betas,
-        "alphas": alphas,
-        "alphas_cumprod": alphas_cumprod,
-        "sqrt_alphas_cumprod": torch.sqrt(alphas_cumprod),
-        "sqrt_one_minus_alphas_cumprod": torch.sqrt(1 - alphas_cumprod),
-        "posterior_variance": posterior_variance,
+        "betas": betas.float(),
+        "alphas": alphas.float(),
+        "alphas_cumprod": alphas_cumprod.float(),
+        "sqrt_alphas_cumprod": torch.sqrt(alphas_cumprod).float(),
+        "sqrt_one_minus_alphas_cumprod": torch.sqrt(1 - alphas_cumprod).float(),
+        "posterior_variance": posterior_variance.float(),
     }

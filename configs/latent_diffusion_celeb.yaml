@@ -7,13 +7,16 @@ model:
   params:
     timesteps: 1000
     test_timesteps: 1000
-    channel_mults: [1, 2, 4, 8]
-    num_blocks: [1, 2, 2, 2]
+    base_channels: 128
+    channel_mults: [1, 2, 4]
+    num_blocks: [1, 2, 4]
     use_attention: true
     time_emb_dim: 128
     text_emb_dim: null                   # Set to null if CFG not required
     sample_condition_weight: 10
     renormalise: true
+    compile_vae: true
+    schedule_type: "linear"
   checkpoint: null     # Use for evaluation or restarting training
 
 optimizer:                              
@@ -21,14 +24,14 @@ optimizer:
   params:
     lr: 0.0002
     weight_decay: 0.01
-  accumulate_steps: 4                   # Number of steps to accumulate gradients over
+  accumulate_steps: 1                   # Number of steps to accumulate gradients over
   max_grad_norm: 1.0                    # Set to inf to disable gradient clipping  
 
 training:
-  batch_size: 16
-  epochs: 300
+  batch_size: 96
+  epochs: 101
   device: "cuda"
-  metric_interval: 300
+  metric_interval: 1000
   ema_decay: 0.9999                    # Set to 0 to disable EMA
   save_after_epoch: 10                # Save all checkpoints after this epoch
 
@@ -42,14 +45,13 @@ dataset:
     num_workers: 8
     pin_memory: true
     persistent_workers: true
-    image_size: [512, 512]
+    image_size: [256, 256]
     attr_target: "smiling"          # Only for CelebA dataset
 
 loss:
-  type: "pair_smooth"                      # options: vae_loss, pair_mse
+  type: "pair_mse"                      # options: vae_loss, pair_mse
   params:
     reduction: "mean"
-    beta: 1.0
 
 metrics:
   fid:

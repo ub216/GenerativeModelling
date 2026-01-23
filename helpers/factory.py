@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 from loguru import logger
@@ -57,7 +57,9 @@ def get_model(
     cfg: Dict[str, Any],
     dataloader: torch.utils.data.DataLoader = None,
     image_size: Tuple[int, int, int] = None,
-) -> custom_types.GenBaseModel:
+    build_ema: bool = True,
+    ema_decay: float = 0.9999,
+) -> Tuple[custom_types.GenBaseModel, custom_types.GenEMAModel | None]:
     if image_size is not None:
         h, w, c = image_size
     elif dataloader is not None:
@@ -88,16 +90,36 @@ def get_model(
     logger.info(f"Model params: {params}")
     if name == "vae":
         assert h == w, f"VAE implementation can only handle square images for now"
-        return models.VAE(**params)
+        return models.VAE(**params), (
+            models.EMAModel(models.VAE(**params), decay=ema_decay)
+            if build_ema
+            else None
+        )
     if name == "gan":
         assert h == w, f"GAN implementation can only handle square images for now"
-        return models.GAN(**params)
+        return models.GAN(**params), (
+            models.EMAModel(models.GAN(**params), decay=ema_decay)
+            if build_ema
+            else None
+        )
     elif name == "diffusion":
-        return models.DiffusionModel(**params)
+        return models.DiffusionModel(**params), (
+            models.EMAModel(models.DiffusionModel(**params), decay=ema_decay)
+            if build_ema
+            else None
+        )
     elif name == "flow":
-        return models.FlowModel(**params)
+        return models.FlowModel(**params), (
+            models.EMAModel(models.FlowModel(**params), decay=ema_decay)
+            if build_ema
+            else None
+        )
     elif name == "latent_diffusion":
-        return models.LatentDiffusionModel(**params)
+        return models.LatentDiffusionModel(**params), (
+            models.EMAModel(models.LatentDiffusionModel(**params), decay=ema_decay)
+            if build_ema
+            else None
+        )
     else:
         raise ValueError(f"Unknown model type: {name}")
 

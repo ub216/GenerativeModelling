@@ -75,6 +75,26 @@ def ddim_step(
 
 
 @torch.no_grad()
+def sdedit_add_noise(
+    x0: torch.Tensor, t_idx: int, model: any, device: str
+) -> torch.Tensor:
+    """
+    The function adds Gaussian noise to the clean image x0 to reach the latent state x_t
+    corresponding to the provided timestep index.
+    """
+    # Obtain the cumulative product of alphas for the specific timestep
+    a_t = model.train_alphas_cumprod[t_idx].to(device)
+
+    # Generate random Gaussian noise
+    noise = torch.randn_like(x0).to(device)
+
+    # Forward diffusion formula: x_t = sqrt(alpha_bar) * x0 + sqrt(1 - alpha_bar) * noise
+    x_t = torch.sqrt(a_t) * x0 + torch.sqrt(1.0 - a_t) * noise
+
+    return x_t
+
+
+@torch.no_grad()
 def ddim_invert(
     model,
     x0: torch.Tensor,  # (1,C,H,W) in model space (maybe [-1,1] if renormalise)

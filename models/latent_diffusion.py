@@ -2,8 +2,11 @@ import math
 from typing import Dict, List, Optional, Tuple
 
 import torch
+import torchvision.transforms as T
 from diffusers import AutoencoderKL
 from loguru import logger
+from matplotlib import pyplot as plt
+from PIL import Image
 
 from models.base_model import BaseModel
 from models.diffusion import DiffusionModel
@@ -14,16 +17,17 @@ class LatentDiffusionModel(BaseModel):
         self,
         # Diffusion specific params
         base_channels: int = 64,
-        channel_mults: List[int] = [1, 2, 4, 8],
-        num_blocks: List[int] = [1, 2, 2, 2],
+        channel_mults: List[int] = [1, 2, 4],
+        num_blocks: List[int] = [1, 2, 2],
         time_emb_dim: int = 128,
-        text_emb_dim: Optional[int] = 128,
+        text_emb_dim: Optional[int] = None,
         timesteps: int = 1000,
         schedule_type: str = "cosine",
         # VAE params
         renormalise: bool = True,
         vae_model_name: str = "stabilityai/sd-vae-ft-mse",
         device: str = "cuda",
+        compile_vae: bool = False,
         *args,
         **kwargs,
     ):
@@ -39,12 +43,23 @@ class LatentDiffusionModel(BaseModel):
         for param in self.vae.parameters():
             param.requires_grad = False
 
+        if compile_vae:
+            try:
+                self.vae.encoder = torch.compile(
+                    self.vae.encoder, mode="reduce-overhead"
+                )
+                logger.info("VAE Encoder compiled successfully using torch.compile")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to compile VAE: {e}. Falling back to eager mode."
+                )
+
         # The VAE scaling factor is crucial for training stability
-        self.scaling_factor = 0.18215
+        self.scaling_factor = self.vae.config.scaling_factor
 
         # initialize diffusionModel backbone
         # Note: in_channels is ALWAYS 4 for this VAE (latent channels)
-        del kwargs["in_channels"]  # Remove if passed in kwargs
+        kwargs.pop("in_channels", None)  # Remove if passed in kwargs
         self.model = DiffusionModel(
             in_channels=4,
             base_channels=base_channels,
@@ -63,11 +78,14 @@ class LatentDiffusionModel(BaseModel):
         self.has_conditional_generation = self.model.has_conditional_generation
 
     @torch.no_grad()
-    def encode(self, x: torch.Tensor) -> torch.Tensor:
+    def encode(self, x: torch.Tensor, use_sample=True) -> torch.Tensor:
         """Pixels (B, 3, H, W) -> Latents (B, 4, H/8, W/8)"""
         # x should be in range [-1, 1]
         posterior = self.vae.encode(x).latent_dist
-        latents = posterior.sample() * self.scaling_factor
+        if use_sample:
+            latents = posterior.sample() * self.scaling_factor
+        else:
+            latents = posterior.mode() * self.scaling_factor
         return latents
 
     @torch.no_grad()
@@ -139,8 +157,13 @@ class LatentDiffusionModel(BaseModel):
             batch_size=batch_size,
             conditioning=conditioning,
             use_ddim=use_ddim,
-            c=float("inf"),  # Guidance scale for sampling
+            dynamic_threshold=False,  # No dynamic thresholding during sampling
+            threshold_coeff=15.0,  # Clamping value
+            clamp_output=False,
             **kwargs,
+        )
+        logger.info(
+            f"Generated latents absolute distribution: min {latents.abs().min()}, max {latents.abs().max()}"
         )
 
         # decode Latents to Pixels
@@ -149,13 +172,10 @@ class LatentDiffusionModel(BaseModel):
         for i in range(0, latents.shape[0], batch_size):
             batch_latents = latents[i : i + batch_size].to(device)
 
-            # Un-scale the latents before decoding (VAE Scaling Factor)
-            batch_latents = batch_latents / self.scaling_factor
-
             # Decode to pixels
             # decoded.sample is in range [-1, 1]
             decoded = self.decode(batch_latents)
-            all_images.append(decoded.cpu())
+            all_images.append(decoded)
 
         samples = torch.cat(all_images, dim=0)
 
@@ -166,3 +186,76 @@ class LatentDiffusionModel(BaseModel):
 
         self.model.train()
         return samples.clamp(0.0, 1.0)
+
+
+def test_vae_reconstruction(
+    model_path: str = "stabilityai/sd-vae-ft-mse",
+    img_path: str = "assets/test_image.jpg",
+):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    img_size = 512
+
+    # Initialize the Model
+    print("Initializing LatentDiffusionModel...")
+    model = LatentDiffusionModel()
+    model.eval()
+
+    # Preprocess Test Image
+    transform = T.Compose(
+        [
+            T.Resize(img_size),
+            T.RandomHorizontalFlip(p=0.5),
+            T.ToTensor(),  # Maps to [0, 1]
+        ]
+    )
+
+    # Load a real image or create a dummy one if not provided
+    try:
+        raw_img = Image.open(img_path).convert("RGB")
+    except FileNotFoundError:
+        print(f"Image {img_path} not found, using random noise for test.")
+        raw_img = Image.fromarray(
+            (torch.rand(img_size, img_size, 3).numpy() * 255).astype("uint8")
+        )
+
+    img_tensor = transform(raw_img).unsqueeze(0).to(device)
+    img_tensor = img_tensor * 2.0 - 1.0  # Map to [-1, 1] as expected by VAE
+
+    # Generate Latents via Encoder
+    print("Encoding...")
+    with torch.no_grad():
+        # use_sample=False for deterministic mode comparison
+        latents = model.encode(img_tensor, use_sample=False)
+    print(f"latents distribution: min {latents.abs().min()}, max {latents.abs().max()}")
+
+    # Decode Latents via PyTorch Decoder
+    print("Decoding...")
+    with torch.no_grad():
+        reconstructed_tensor = model.decode(latents)
+
+    # Post-process and Plot
+    def to_numpy(t):
+        t = (t.clamp(-1, 1) + 1) / 2  # Denormalize to [0, 1]
+        return t.squeeze(0).permute(1, 2, 0).cpu().numpy()
+
+    orig_np = to_numpy(img_tensor)
+    recon_np = to_numpy(reconstructed_tensor)
+
+    plt.figure(figsize=(12, 6))
+    plt.subplot(1, 2, 1)
+    plt.title("Original Image")
+    plt.imshow(orig_np)
+    plt.axis("off")
+
+    plt.subplot(1, 2, 2)
+    plt.title("TRT Encoded -> PT Decoded")
+    plt.imshow(recon_np)
+    plt.axis("off")
+
+    plt.tight_layout()
+    plt.show()
+    print("Test complete.")
+
+
+if __name__ == "__main__":
+    test_vae_reconstruction()
