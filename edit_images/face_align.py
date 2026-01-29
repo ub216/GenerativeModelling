@@ -32,7 +32,6 @@ class FaceAligner:
         self,
         image_size: int = 64,
         device: str = "cuda",
-        relaxation_scale: float = 0.975,  # 0.925-0.975 matches CelebA distribution
         min_face_size: int = 40,
     ):
         self.image_size = image_size
@@ -58,14 +57,18 @@ class FaceAligner:
         # normalise the crop box (178x178) to [0, image_size)
         # now we divide by 178 for BOTH X and Y because it's a square crop
         self.target_landmarks = (cropped_template / 178.0) * image_size
-        self.relaxation_scale = relaxation_scale
 
     def detect(self, img_bgr: np.ndarray):
         img_rgb = _to_rgb_uint8(img_bgr)
         boxes, probs, landmarks = self.mtcnn.detect(img_rgb, landmarks=True)
         return boxes, probs, landmarks
 
-    def align_largest(self, img_bgr, debug_save=False):
+    def align_largest(
+        self,
+        img_bgr,
+        debug_save=False,
+        relaxation_scale=0.975,  # 0.925-0.975 matches CelebA distribution
+    ):
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
         boxes, _, lms = self.mtcnn.detect(img_rgb, landmarks=True)
 
@@ -85,7 +88,7 @@ class FaceAligner:
         # Note: scale < 1.0 = Zoom Out (Relaxed), scale > 1.0 = Zoom In (Tight)
         relaxed_target_lm = (
             self.target_landmarks - target_center
-        ) * self.relaxation_scale + target_center
+        ) * relaxation_scale + target_center
 
         # compute similarity transform
         # map original landmarks to the relaxed target

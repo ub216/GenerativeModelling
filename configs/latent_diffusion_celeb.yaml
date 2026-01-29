@@ -9,27 +9,27 @@ model:
     test_timesteps: 1000
     base_channels: 128
     channel_mults: [1, 2, 4]
-    num_blocks: [1, 2, 4]
+    num_blocks: [2, 2, 4]
     use_attention: true
     time_emb_dim: 128
-    text_emb_dim: null                   # Set to null if CFG not required
-    sample_condition_weight: 10
+    text_emb_dim: 128                   # Set to null if CFG not required
+    sample_condition_weight: 7.5
     renormalise: true
     compile_vae: true
     schedule_type: "linear"
-  checkpoint: null     # Use for evaluation or restarting training
+  checkpoint: runs/latent_diffusion_celeb_hq_20260128-194006/epoch_221_copied.pth     # Use for evaluation or restarting training
 
 optimizer:                              
   type: "adamw"                          
   params:
-    lr: 0.0002
+    lr: 0.0001
     weight_decay: 0.01
   accumulate_steps: 1                   # Number of steps to accumulate gradients over
   max_grad_norm: 1.0                    # Set to inf to disable gradient clipping  
 
 training:
   batch_size: 96
-  epochs: 101
+  epochs: 601
   device: "cuda"
   metric_interval: 1000
   ema_decay: 0.9999                    # Set to 0 to disable EMA

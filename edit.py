@@ -44,14 +44,18 @@ def edit_smile(
     model: BaseModel,
     aligner: FaceAligner,
     verifier: FaceVerifier,
-    input_bgr_path: str,
     prompt: str,
+    input_bgr_path: Optional[str] = None,
+    bgr: Optional[np.ndarray] = None,
     T_test: int = 50,
     step_percent: float = 0.4,
     id_scale: float = 0.0,
     edit_mode: str = "invert",
 ) -> Tuple[np.ndarray, float]:
-    bgr = cv2.imread(input_bgr_path)
+    if bgr is None and input_bgr_path is None:
+        raise RuntimeError("Either bgr or input_bgr_path must be provided")
+    if bgr is None:
+        bgr = cv2.imread(input_bgr_path)
 
     # detect face, align
     aligned_rgb, meta = aligner.align_largest(bgr)
@@ -120,16 +124,17 @@ def edit_smile(
     edited_aligned_rgb = postprocess_from_model(x_edit, renormalise=model.renormalise)
     out_bgr = aligner.unalign_and_paste(edited_aligned_rgb, bgr, meta, feather=10)
     similarity = verifier.get_similarity(aligned_rgb, edited_aligned_rgb)
-    return out_bgr, similarity
+    return out_bgr, similarity, aligned_rgb, edited_aligned_rgb
 
 
 def make_progressive_video(
     model: BaseModel,
     aligner: FaceAligner,
     verifier: FaceVerifier,
-    input_bgr_path: str,
     prompt: str,
     output_path: str,
+    input_bgr_path: Optional[str] = None,
+    bgr: Optional[np.ndarray] = None,
     T_test: int = 50,
     step_percent: float = 0.4,
     id_scale: float = 20.0,
@@ -141,7 +146,10 @@ def make_progressive_video(
     Use both Identity Guidance (to keep the person recognizable) and
     Temporal Guidance (to ensure the transition is smooth).
     """
-    bgr = cv2.imread(input_bgr_path)
+    if bgr is None and input_bgr_path is None:
+        raise RuntimeError("Either bgr or input_bgr_path must be provided")
+    if bgr is None:
+        bgr = cv2.imread(input_bgr_path)
     aligned_rgb, meta = aligner.align_largest(bgr)
     if aligned_rgb is None:
         raise RuntimeError("No face detected")
@@ -309,17 +317,18 @@ if __name__ == "__main__":
     verifier = FaceVerifier(device="cuda")
 
     if args.mode == "image":
-        out, sim_score = edit_smile(
+        output = edit_smile(
             model,
             aligner,
             verifier,
-            args.input,
+            input_bgr_path=args.input,
             prompt=args.prompt,
             T_test=args.T_test,
             step_percent=args.step_percent,
             id_scale=args.id_scale,
             edit_mode=args.edit_mode,
         )
+        out, sim_score = output[0], output[1]
         print(f"Face similarity: {sim_score:.4f}")
         plt.subplot(1, 2, 1)
         plt.axis("off")

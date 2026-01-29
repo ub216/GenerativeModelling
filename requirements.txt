@@ -9,4 +9,5 @@ loguru
 transformers
 diffusers --no-deps
 facenet-pytorch --no-deps
+accelerate --no-deps
 imageio

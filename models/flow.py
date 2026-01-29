@@ -5,7 +5,7 @@ import torch
 from loguru import logger
 
 import helpers.custom_types as custom_types
-from helpers.utils import drop_condition
+from helpers.diffusion_utils import drop_condition
 from models.backbone.simple_unet import SimpleUNet
 from models.base_model import BaseModel
 

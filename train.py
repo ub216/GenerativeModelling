@@ -14,6 +14,7 @@ from tqdm import tqdm
 import helpers.custom_types as custom_types
 import metrics
 import wandb
+from helpers.diffusion_utils import drop_condition
 from helpers.factory import (
     get_dataset,
     get_loss_function,
@@ -22,7 +23,7 @@ from helpers.factory import (
     get_optimizer_manager,
 )
 from helpers.optimizer_manager import OptimizerManager
-from helpers.utils import drop_condition, save_eval_results
+from helpers.utils import save_eval_results
 
 
 # -----------------------------

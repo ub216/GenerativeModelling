@@ -95,7 +95,16 @@ class LatentDiffusionModel(BaseModel):
         images = self.vae.decode(z).sample
         return images
 
-    def forward(self, x: torch.Tensor, conditioning: Optional[List[str]] = None):
+    def forward(
+        self,
+        x: torch.Tensor,
+        time_steps: Optional[torch.Tensor] = None,
+        noise: Optional[torch.Tensor] = None,
+        conditioning: Optional[List[str]] = None,
+        use_sample: bool = True,
+        *args,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Training forward pass:
         1. Encode image to latents
@@ -108,10 +117,12 @@ class LatentDiffusionModel(BaseModel):
 
         # Encode real images to latent space
         with torch.no_grad():
-            latents = self.encode(x0)
+            latents = self.encode(x0, use_sample=use_sample)
 
         # Run the standard diffusion training logic on the latents
-        return self.model(latents, conditioning=conditioning)
+        return self.model(
+            latents, time_steps=time_steps, noise=noise, conditioning=conditioning
+        )
 
     @property
     def train_alphas_cumprod(self):

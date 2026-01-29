@@ -1,12 +1,12 @@
 import os
-from typing import List, Optional, Tuple, Union
+from typing import List, Tuple, Union
 
 import pandas as pd
 import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
-from torchvision import transforms
-from torchvision.transforms import InterpolationMode
+
+from helpers.image_utils import get_transforms
 
 
 class CelebAHQDataset(Dataset):
@@ -61,14 +61,32 @@ class CelebAHQDataset(Dataset):
         self.selected_labels = [self.all_labels[i] for i in self.selected_indices]
 
     def _generate_caption(self, attr_values: torch.Tensor) -> str:
-        tags = []
+        """
+        Formats:
+        - No attributes: "photo of a face"
+        - With attributes: "photo of a smiling, young face"
+        """
+        present_tags = []
+
         for i, val in enumerate(attr_values):
-            label_name = self.selected_labels[i].replace("_", " ")
+            # CelebA labels are usually -1 (False) or 1 (True)
             if val > 0:
-                tags.append(label_name)
+                label_name = self.selected_labels[i].replace("_", " ")
+                present_tags.append(label_name)
             elif self.use_negation:
-                tags.append(f"no {label_name}")
-        return ", ".join(tags) if tags else ""
+                # Optional: If you still want negation, though for your
+                # current experiment "a photo of a face" is cleaner.
+                label_name = self.selected_labels[i].replace("_", " ")
+                present_tags.append(f"non-{label_name}")
+
+        if not present_tags:
+            return "photo of a face"
+
+        # Join attributes with commas: "smiling, young"
+        attr_string = ", ".join(present_tags)
+
+        # Final prompt: "a photo of a smiling, young face"
+        return f"photo of a {attr_string} face"
 
     def __len__(self):
         return len(self.filenames)
@@ -107,32 +125,7 @@ def get_celeb_hq_dataloader(
         image_size = (image_size, image_size)
 
     # Preprocessing for Latent Diffusion
-    transform = transforms.Compose(
-        [
-            # GEOMETRIC ROBUSTNESS (Zoom In, Zoom Out, Shift, Rotate)
-            transforms.RandomAffine(
-                degrees=5,  # Robust to tilted heads
-                translate=(0.05, 0.05),  # Robust to off-center faces
-                scale=(
-                    0.9,
-                    1.1,
-                ),  # ZOOM: 0.8 = Zoom Out (20% smaller), 1.2 = Zoom In (20% larger)
-                shear=1,  # Slight perspective skew
-                interpolation=InterpolationMode.BILINEAR,
-                fill=127,  # Fills "Zoom Out" borders with neutral gray (before normalization)
-            ),
-            # ALIGNMENT & FRAMING
-            transforms.Resize(image_size),
-            transforms.RandomHorizontalFlip(p=0.5),
-            # PHOTOMETRIC ROBUSTNESS (Lighting & Quality)
-            transforms.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.1),
-            transforms.RandomApply(
-                [transforms.GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 1.0))], p=0.1
-            ),  # Simulates slightly blurry or "inverted" real-world photos
-            # LDM PREPARATION
-            transforms.ToTensor(),  # Scales to [0, 1]
-        ]
-    )
+    transform = get_transforms(image_size)
 
     dataset = CelebAHQDataset(root=root, transform=transform, attr_target=attr_target)
 

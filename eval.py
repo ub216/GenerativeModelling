@@ -10,8 +10,9 @@ from loguru import logger
 
 import helpers.custom_types as custom_types
 import metrics
+from helpers.diffusion_utils import drop_condition
 from helpers.factory import get_dataset, get_metrics, get_model
-from helpers.utils import drop_condition, save_eval_results
+from helpers.utils import save_eval_results
 
 
 # -----------------------------

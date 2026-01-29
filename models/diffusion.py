@@ -5,7 +5,8 @@ import torch
 from loguru import logger
 
 import helpers.custom_types as custom_types
-from helpers.utils import drop_condition, log_once
+from helpers.diffusion_utils import drop_condition
+from helpers.utils import log_once_warning
 from models.backbone.unet import UNet
 from models.base_model import BaseModel
 
@@ -311,7 +312,7 @@ class DiffusionModel(BaseModel):
                     # At extreme noise, the model's prediction is unreliable for x0 reconstruction
                     # We can approximate pred_x0 as 0 or a very small value to prevent explosion
                     pred_x0 = torch.zeros_like(x_t)
-                    log_once(f"Warning: Extremely low alpha_cum_t at t = {t}")
+                    log_once_warning(f"Warning: Extremely low alpha_cum_t at t = {t}")
                 else:
                     sqrt_alpha_cum_t = torch.sqrt(alpha_cum_t).clamp(min=1e-12)
                     sqrt_one_minus_alpha_cum_t = torch.sqrt(1 - alpha_cum_t)

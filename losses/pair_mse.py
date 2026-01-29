@@ -36,8 +36,7 @@ class PairMSELoss(nn.Module):
             len(outputs) >= 2 and outputs[0].shape == outputs[1].shape
         ), "Outputs and targets must have the same shape"
         predicted, target = outputs[0], outputs[1]
-        if len(outputs) > 2:
-            weights = outputs[2]
+
         # Calculate raw MSE per pixel
         loss = F.mse_loss(predicted, target, reduction="none")
 

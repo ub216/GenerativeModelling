@@ -5,7 +5,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 import helpers.custom_types as custom_types
-from helpers.utils import log_once
+from helpers.utils import log_once_info
 from models.backbone.dit_block import DiTBlock
 from models.backbone.positional_embeddings import get_2d_sincos_pos_embed
 from models.backbone.residual_conv import ResidualConv
@@ -111,7 +111,7 @@ class UNet(nn.Module):
                 ch, max_image_size // (2 ** len(channel_mults))
             )
             pos_embed = pos_embed.view(1, bottleneck_grid, bottleneck_grid, ch)
-            log_once(
+            log_once_info(
                 f"pos_embed shape: {pos_embed.shape} for bottleneck size {bottleneck_grid}"
             )
             self.register_buffer("pos_embed", pos_embed)  # (1, h, w, c)
@@ -180,12 +180,12 @@ class UNet(nn.Module):
             y = down(y)
 
         if self.use_attention:
-            log_once(
+            log_once_info(
                 f"Using attention in the bottleneck of UNet with bottleneck shape {y.shape}"
             )
             b, c, h, w = y.shape
             y = y.view(b, c, h * w).permute(0, 2, 1)  # (b, seq_len, c)
-            log_once(
+            log_once_info(
                 f"Reshaped bottleneck to {y.shape} for attention, pos_embed shape: {self.pos_embed.shape}"
             )
             curr_pos = self.pos_embed[:, :h, :w, :].reshape(
