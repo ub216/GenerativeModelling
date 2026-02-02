@@ -18,11 +18,12 @@ As an example of its usage, we demonstrate image-to-video generation for facial 
 - [x] Add support for flow matching
 - [ ] Add support for GANs
 - [x] Add support for CFG in diffusion/flow
-- [x] Add support for CelebA dataset
+- [x] Add support for latent diffusion model
 - [x] Add DiT blocks
-- [x] Add latent diffusion model
-- [ ] Add multi-gpu training support
+- [x] Add support for DPO training
 - [x] Add some results
+- [ ] Integrate NVIDIA's [FastGen](https://github.com/NVlabs/FastGen) to support diffusion distillation
+- [ ] Add multi-gpu training support
 - [ ] Create a Gradio app for editing smile
 
 ## Getting Started
@@ -85,7 +86,7 @@ python smile.py --input <path_to_serious_face_image>
 (see the avilable parameters in smile.py to experiment with)
 
 ### 7. Results
-#### Results for diffusion model trained on CelebA datasets (64x64).
+#### Results for diffusion model trained on CelebA datasets.
 You can donwload this model from [here](https://drive.google.com/file/d/1Pb9B6iuZvVoaCEp4_dETjzSAUHu9yRqP/view?usp=sharing)
 
 ![Results1](assets/generated_samples.png)
@@ -100,26 +101,30 @@ You can donwload this model from [here](https://drive.google.com/file/d/1Pb9B6iu
 
 
 #### Results for converting single image to a video of progressively smiling preson using temporal guidance
-|  |  | Unnatural progression|
-|---|---|---|
-| <img src="assets/serious_face_progression_inf.gif" width="250"> | <img src="assets/serious_face_2_progression_inf.gif" width="250"> | <img src="assets/serious_face_3_progression_inf.gif" width="250"> |
-
+| w/o DPO | DPO |
+| :-----: | :--: |
+| <img src="assets/serious_face_progression_inf.gif" width="250"> | <img src="assets/serious_face_progression_inf_dpo.gif" width="250"> |
+| <img src="assets/serious_face_3_progression_inf.gif" width="250"> | <img src="assets/serious_face_3_progression_inf_dpo.gif" width="250"> |
+| <img src="assets/serious_face_2_progression_inf.gif" width="250"> | <img src="assets/serious_face_2_progression_inf_dpo.gif" width="250"> |
 ### Note: 
 - We use invert then edit here. Could also be extended to SDEdit which adds randomness.
-- Bluriness is because the model was trained on a lower resolution. 
+- We use LDM with DiT blocks in bottleneck for better symmetry.
+- For DPO training we use facenet-pytroch for face similarity and [off-the-shelf](https://huggingface.co/abhilash88/face-emotion-detection) model for smile detection.
+- Pair of images are generated with different parameters and ranked using the two models.
 
 
 ## Repository Structure
 
 - [`train.py`](train.py): Script to train generative models.
 - [`eval.py`](eval.py): Script to evaluate trained models.
+- [`edit.py`](edit.py): Script to edit an image using pre-trained diffusion model.
 - [`configs/`](configs/): YAML configuration files for experiments.
 - [`models/`](models/): Model architectures.
 - [`losses/`](losses/): Loss functions for training.
 - [`metrics/`](metrics/): Evaluation metrics.
 - [`loaders/`](loaders/): Dataset loaders.
 - [`helpers/`](helpers/): Factory functions and classes.
-- [`edit_images/`](edit_images/): Use diffusion model with guidance (CFG and classifier based) to edit face images
+- [`edit_images/`](edit_images/): Use diffusion model with guidance (CFG and classifier based) to edit images.
 
 ## Contributing
 

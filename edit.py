@@ -129,6 +129,7 @@ def edit_smile(
     dec_pairs = full_dec[-num_steps:]
     edit_cond = [prompt] if model.has_conditional_generation else None
     cfg_sched = linear_cfg_ramp(cfg_start=1.5, cfg_end=model.sample_condition_weight)
+    print(model.sample_condition_weight)
 
     # identity guidance function if scale > 0.
     guidance_fn = None
@@ -345,13 +346,29 @@ if __name__ == "__main__":
     )
     parser.add_argument("--image_size", type=int, default=64, help="Model image size")
     parser.add_argument("--prompt", type=str, default="smiling", help="Editing prompt")
-    parser.add_argument("--T_test", type=int, default=50)
-    parser.add_argument("--step_percent", type=float, default=0.4)
+    parser.add_argument(
+        "--T_test",
+        type=int,
+        default=50,
+        help="DDIM steps. Larger values give better fidelity but takes more time.",
+    )
+    parser.add_argument(
+        "--step_percent",
+        type=float,
+        default=0.4,
+        help="Noise level to invert back to. Larger values gives structural/global changes.",
+    )
     parser.add_argument(
         "--id_scale",
         type=float,
         default=0.0,
         help="Identity guidance scale (e.g. 50.0)",
+    )
+    parser.add_argument(
+        "--sample_condition_weight",
+        type=float,
+        default=7.5,
+        help="Conditioning weight for sampling",
     )
     parser.add_argument(
         "--temp_scale",
@@ -373,6 +390,7 @@ if __name__ == "__main__":
         cfg = yaml.safe_load(f)
 
     # Setup model
+    cfg["model"]["params"]["sample_condition_weight"] = args.sample_condition_weight
     model, _ = get_model(
         cfg["model"],
         None,
@@ -428,10 +446,15 @@ if __name__ == "__main__":
 
         plt.tight_layout()
         plt.savefig(
-            f"outputs_smiling/comparison_{filename}.png", dpi=200, bbox_inches="tight"
+            f"outputs_smiling/comparison_{filename}_id_{args.id_scale}_step_{args.T_test}_perc_{args.step_percent}_weight_{args.sample_condition_weight}.png",
+            dpi=200,
+            bbox_inches="tight",
         )  # saves the whole figure
-        plt.show()
-        cv2.imwrite(f"outputs_smiling/{filename}_edit_{args.id_scale}.jpg", out)
+        # plt.show()
+        cv2.imwrite(
+            f"outputs_smiling/{filename}_edit_id_{args.id_scale}_step_{args.T_test}_perc_{args.step_percent}_weight_{args.sample_condition_weight}.jpg",
+            out,
+        )
 
     elif args.mode == "video":
         make_progressive_video(

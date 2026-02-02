@@ -92,9 +92,9 @@ class LatentDiffusionModel(BaseModel):
 
     def decode(self, z: torch.Tensor) -> torch.Tensor:
         """Latents (B, 4, h, w) -> Pixels (B, 3, H, W)"""
-        with torch.no_grad():
-            z = z / self.scaling_factor
-            images = self.vae.decode(z).sample
+        # with torch.no_grad():
+        z = z / self.scaling_factor
+        images = self.vae.decode(z).sample
         return images
 
     def forward(

@@ -120,6 +120,12 @@ def get_model(
             if build_ema
             else None
         )
+    elif name == "dpo_latent_diffusion":
+        return models.DPOLatentDiffusionModel(**params), (
+            models.EMAModel(models.DPOLatentDiffusionModel(**params), decay=ema_decay)
+            if build_ema
+            else None
+        )
     else:
         raise ValueError(f"Unknown model type: {name}")
 

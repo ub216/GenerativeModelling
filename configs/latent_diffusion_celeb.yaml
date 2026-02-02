@@ -13,7 +13,7 @@ model:
     use_attention: true
     time_emb_dim: 128
     text_emb_dim: 128                   # Set to null if CFG not required
-    sample_condition_weight: 7.5
+    sample_condition_weight: 25.0
     renormalise: true
     compile_vae: true
     schedule_type: "linear"

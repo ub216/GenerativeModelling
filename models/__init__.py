@@ -1,4 +1,5 @@
 from models.diffusion import DiffusionModel
+from models.dpo_latent_diffusion import DPOLatentDiffusionModel
 from models.ema import EMAModel
 from models.flow import FlowModel
 from models.gan import GAN
