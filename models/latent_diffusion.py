@@ -35,7 +35,9 @@ class LatentDiffusionModel(BaseModel):
         self.device = device
 
         # load the Pre-trained VAE
-        self.vae = AutoencoderKL.from_pretrained(vae_model_name).to(device)
+        self.vae = AutoencoderKL.from_pretrained(
+            vae_model_name, local_files_only=True
+        ).to(device)
         self.renormalise = renormalise
 
         # Freeze VAE - we only train the Diffusion backbone
@@ -74,25 +76,25 @@ class LatentDiffusionModel(BaseModel):
             *args,
             **kwargs,
         )
-
+        self.sample_condition_weight = self.model.sample_condition_weight
         self.has_conditional_generation = self.model.has_conditional_generation
 
-    @torch.no_grad()
     def encode(self, x: torch.Tensor, use_sample=True) -> torch.Tensor:
         """Pixels (B, 3, H, W) -> Latents (B, 4, H/8, W/8)"""
         # x should be in range [-1, 1]
-        posterior = self.vae.encode(x).latent_dist
-        if use_sample:
-            latents = posterior.sample() * self.scaling_factor
-        else:
-            latents = posterior.mode() * self.scaling_factor
+        with torch.no_grad():
+            posterior = self.vae.encode(x).latent_dist
+            if use_sample:
+                latents = posterior.sample() * self.scaling_factor
+            else:
+                latents = posterior.mode() * self.scaling_factor
         return latents
 
-    @torch.no_grad()
     def decode(self, z: torch.Tensor) -> torch.Tensor:
         """Latents (B, 4, h, w) -> Pixels (B, 3, H, W)"""
-        z = z / self.scaling_factor
-        images = self.vae.decode(z).sample
+        with torch.no_grad():
+            z = z / self.scaling_factor
+            images = self.vae.decode(z).sample
         return images
 
     def forward(

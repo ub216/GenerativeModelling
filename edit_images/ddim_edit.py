@@ -2,6 +2,8 @@ from typing import Callable, List, Optional, Tuple
 
 import torch
 
+import models
+
 
 def make_ddim_time_pairs(train_T: int, T_test: int, device) -> List[Tuple[int, int]]:
     # Create a schedule from 0 up to T-1
@@ -53,6 +55,7 @@ def ddim_step(
     alpha_bar_t: torch.Tensor,
     alpha_bar_next: torch.Tensor,
     dynamic_threshold_fn: Callable[[torch.Tensor], torch.Tensor] | None = None,
+    clamp_pred: float = 1.0,
 ) -> torch.Tensor:
     # clamp alpha to avoid division by near-zero at the noisy end of the schedule
     eps_safe = 1e-5
@@ -64,7 +67,7 @@ def ddim_step(
     if dynamic_threshold_fn is not None:
         pred_x0 = dynamic_threshold_fn(pred_x0)
     # Also clamp x0 to prevent extreme outliers during the ODE walk
-    pred_x0 = pred_x0.clamp(-1.0, 1.0)
+    pred_x0 = pred_x0.clamp(-clamp_pred, clamp_pred)
 
     # compute the direction pointing to x_t
     dir_xt = torch.sqrt(1.0 - alpha_bar_next) * eps_theta
@@ -101,6 +104,7 @@ def ddim_invert(
     conditioning: Optional[List[str]],  # usually [""] for inversion
     inc_pairs: List[Tuple[int, int]],
     device: str,
+    clamp_pred: float = 1.0,
 ) -> torch.Tensor:
     """
     Produces x_T (noisy latent) via deterministic DDIM inversion along the same skip schedule.
@@ -116,11 +120,7 @@ def ddim_invert(
         a_next = model.train_alphas_cumprod[t_next]
 
         x_t = ddim_step(
-            x_t,
-            eps,
-            a_t,
-            a_next,
-            dynamic_threshold_fn=None,
+            x_t, eps, a_t, a_next, dynamic_threshold_fn=None, clamp_pred=clamp_pred
         )
     return x_t
 
@@ -137,6 +137,7 @@ def ddim_edit_from_noise(
     guidance_fn: Optional[
         Callable[[torch.Tensor, torch.Tensor, int, int], torch.Tensor]
     ] = None,
+    clamp_pred: float = 1.0,
 ) -> torch.Tensor:
     """
     Deterministic DDIM reverse starting from x_T using skip schedule.
@@ -192,6 +193,7 @@ def ddim_edit_from_noise(
                 a_t,
                 a_next,
                 dynamic_threshold_fn=None,  # model._dynamic_threshold,
+                clamp_pred=clamp_pred,
             )
 
     return x_t

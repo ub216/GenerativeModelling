@@ -15,3 +15,6 @@ model:
     sample_condition_weight: 10
     renormalise: true
   checkpoint: ckpts/diffusion_cfg_smiling.pth     # Use for evaluation or restarting training
+
+dataset:
+  type: "celeb"

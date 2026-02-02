@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import yaml
 
+import models
 from edit_images.ddim_edit import (
     ddim_edit_from_noise,
     ddim_invert,
@@ -23,16 +24,27 @@ from models.base_model import BaseModel
 
 
 def preprocess_for_model(
-    rgb64: np.ndarray, renormalise: bool, device: str
+    rgb64: np.ndarray, renormalise: bool, device: str, encode_fn=None
 ) -> torch.Tensor:
     x = torch.from_numpy(rgb64).float() / 255.0  # (H,W,C)
     x = x.permute(2, 0, 1).unsqueeze(0)  # (1,C,H,W)
     if renormalise:
         x = x * 2.0 - 1.0
+    x = x.to(device)
+    if encode_fn is not None:
+        with torch.no_grad():
+            x = encode_fn(x, use_sample=False)
     return x.to(device)
 
 
-def postprocess_from_model(x: torch.Tensor, renormalise: bool) -> np.ndarray:
+def postprocess_from_model(
+    xT: torch.Tensor, renormalise: bool, decode_fn=None
+) -> np.ndarray:
+    if decode_fn is not None:
+        with torch.no_grad():
+            x = decode_fn(xT)
+    else:
+        x = xT
     x = x.detach().cpu()
     if renormalise:
         x = (x + 1.0) / 2.0
@@ -51,6 +63,8 @@ def edit_smile(
     step_percent: float = 0.4,
     id_scale: float = 0.0,
     edit_mode: str = "invert",
+    detect_face: bool = True,
+    debug: bool = False,
 ) -> Tuple[np.ndarray, float]:
     if bgr is None and input_bgr_path is None:
         raise RuntimeError("Either bgr or input_bgr_path must be provided")
@@ -58,23 +72,53 @@ def edit_smile(
         bgr = cv2.imread(input_bgr_path)
 
     # detect face, align
-    aligned_rgb, meta = aligner.align_largest(bgr)
-    if aligned_rgb is None:
-        raise RuntimeError("No face detected")
+    if detect_face:
+        aligned_rgb, meta = aligner.align_largest(bgr)
+        if aligned_rgb is None:
+            raise RuntimeError("No face detected")
+    else:
+        aligned_rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        meta = {}
+
+    if debug:
+        plt.subplot(1, 2, 1)
+        plt.imshow(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
+        plt.subplot(1, 2, 2)
+        plt.imshow(aligned_rgb)
+        plt.show()
 
     # invert with empty conditioning (reconstruct prior)
-    x0 = preprocess_for_model(aligned_rgb, renormalise=model.renormalise, device="cuda")
+    x0 = preprocess_for_model(
+        aligned_rgb,
+        renormalise=model.renormalise,
+        device="cuda",
+        encode_fn=getattr(model, "encode", None),
+    )
     inv_cond = [""] if model.has_conditional_generation else None
     full_inc, full_dec = make_ddim_time_pairs(model.timesteps, T_test, device="cuda")
 
     # slice them to only include the first 40% of the steps
     num_steps = int(len(full_inc) * step_percent)
 
+    if isinstance(model, models.LatentDiffusionModel):
+        clamp_pred = 15.0
+    elif isinstance(model, models.DiffusionModel):
+        clamp_pred = 1.0
+    else:
+        raise NotImplementedError("Model type unrecongnised")
+
     if edit_mode == "invert":
         # Inversion: Deterministic mapping to noise
         inv_cond = [""] if model.has_conditional_generation else None
         inc_pairs = full_inc[:num_steps]
-        xT = ddim_invert(model, x0, inv_cond, inc_pairs=inc_pairs, device="cuda")
+        xT = ddim_invert(
+            model,
+            x0,
+            inv_cond,
+            inc_pairs=inc_pairs,
+            device="cuda",
+            clamp_pred=clamp_pred,
+        )
     else:
         # SDEdit: Stochastic addition of noise
         # The starting timestep index for denoising
@@ -95,6 +139,8 @@ def edit_smile(
                 x0_for_id = x0 * 2.0 - 1.0  # Map [0,1] to [-1,1]
             else:
                 x0_for_id = x0
+            if getattr(model, "decode", None) is not None:
+                x0_for_id = model.decode(x0_for_id)
             target_emb = verifier.get_embedding_differentiable(x0_for_id).detach()
 
         def _id_guidance(x_in, x0_pred, step_idx, total_steps):
@@ -104,6 +150,8 @@ def edit_smile(
             current_scale = id_scale * ramp
 
             # We want to maximize Cosine Similarity, so we minimize (1 - CosSim)
+            if getattr(model, "decode", None) is not None:
+                x0_pred = model.decode(x0_pred)
             curr_emb = verifier.get_embedding_differentiable(x0_pred)
             sim = (curr_emb * target_emb).sum()
             loss = (1 - sim) * current_scale
@@ -119,11 +167,23 @@ def edit_smile(
         device="cuda",
         cfg_schedule=cfg_sched,
         guidance_fn=guidance_fn,
+        clamp_pred=clamp_pred,
     )
 
-    edited_aligned_rgb = postprocess_from_model(x_edit, renormalise=model.renormalise)
-    out_bgr = aligner.unalign_and_paste(edited_aligned_rgb, bgr, meta, feather=10)
+    edited_aligned_rgb = postprocess_from_model(
+        x_edit, renormalise=model.renormalise, decode_fn=getattr(model, "decode", None)
+    )
+    if detect_face:
+        out_bgr = aligner.unalign_and_paste(edited_aligned_rgb, bgr, meta, feather=10)
+    else:
+        out_bgr = cv2.cvtColor(edited_aligned_rgb, cv2.COLOR_RGB2BGR)
     similarity = verifier.get_similarity(aligned_rgb, edited_aligned_rgb)
+    if debug:
+        plt.subplot(1, 2, 1)
+        plt.imshow(aligned_rgb)
+        plt.subplot(1, 2, 2)
+        plt.imshow(edited_aligned_rgb)
+        plt.show()
     return out_bgr, similarity, aligned_rgb, edited_aligned_rgb
 
 
@@ -154,7 +214,12 @@ def make_progressive_video(
     if aligned_rgb is None:
         raise RuntimeError("No face detected")
 
-    x0 = preprocess_for_model(aligned_rgb, renormalise=model.renormalise, device="cuda")
+    x0 = preprocess_for_model(
+        aligned_rgb,
+        renormalise=model.renormalise,
+        device="cuda",
+        encode_fn=getattr(model, "encode", None),
+    )
     inv_cond = [""] if model.has_conditional_generation else None
     full_inc, full_dec = make_ddim_time_pairs(model.timesteps, T_test, device="cuda")
 
@@ -163,13 +228,25 @@ def make_progressive_video(
     inc_pairs = full_inc[:steps_count]
     dec_pairs = full_dec[-steps_count:]
 
-    # 1. Invert ONCE to get the starting noise
-    print("Inverting...")
-    xT_base = ddim_invert(model, x0, inv_cond, inc_pairs=inc_pairs, device="cuda")
+    if isinstance(model, models.LatentDiffusionModel):
+        clamp_pred = 15.0
+    elif isinstance(model, models.DiffusionModel):
+        clamp_pred = 1.0
+    else:
+        raise NotImplementedError("Model type unrecongnised")
 
-    # 2. Get Reference Embedding (Identity)
+    # invert ONCE to get the starting noise
+    print("Inverting...")
+    xT_base = ddim_invert(
+        model, x0, inv_cond, inc_pairs=inc_pairs, device="cuda", clamp_pred=clamp_pred
+    )
+
+    # get Reference Embedding (Identity)
     with torch.no_grad():
-        id_emb = verifier.get_embedding_differentiable(x0).detach()
+        x0_reconstruction = x0
+        if getattr(model, "decode", None) is not None:
+            x0_reconstruction = model.decode(x0)
+        id_emb = verifier.get_embedding_differentiable(x0_reconstruction).detach()
 
     frames = []
     # track the previous frame's latent/prediction for temporal consistency
@@ -195,6 +272,8 @@ def make_progressive_video(
             ramp = step_idx / max(1, total_steps - 1)
             current_id_scale = id_scale * ramp
 
+            if getattr(model, "decode", None) is not None:
+                x0_pred = model.decode(x0_pred)
             # A. Identity Loss
             if current_id_scale > 0:
                 curr_emb = verifier.get_embedding_differentiable(x0_pred)
@@ -222,15 +301,20 @@ def make_progressive_video(
             device="cuda",
             cfg_schedule=cfg_sched,
             guidance_fn=_video_guidance,
+            clamp_pred=clamp_pred,
         )
 
         # Store prediction for next frame's guidance
         # Note: x_edit is the final result of this frame
         prev_x0_pred = x_edit.detach().clone()
+        if getattr(model, "decode", None) is not None:
+            prev_x0_pred = model.decode(prev_x0_pred)
 
         # Post-process
         edited_aligned_rgb = postprocess_from_model(
-            x_edit, renormalise=model.renormalise
+            x_edit,
+            renormalise=model.renormalise,
+            decode_fn=getattr(model, "decode", None),
         )
         out_bgr = aligner.unalign_and_paste(edited_aligned_rgb, bgr, meta, feather=10)
 
@@ -312,8 +396,9 @@ if __name__ == "__main__":
 
     model.eval()
     model = model.to("cuda")
+    template = cfg["dataset"]["type"]
 
-    aligner = FaceAligner(image_size=args.image_size, device="cuda")
+    aligner = FaceAligner(image_size=args.image_size, device="cuda", template=template)
     verifier = FaceVerifier(device="cuda")
 
     if args.mode == "image":
@@ -353,7 +438,7 @@ if __name__ == "__main__":
             model,
             aligner,
             verifier,
-            args.input,
+            input_bgr_path=args.input,
             prompt=args.prompt,
             output_path=f"outputs_smiling/{filename}_progression.gif",
             T_test=args.T_test,

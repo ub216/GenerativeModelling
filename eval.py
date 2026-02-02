@@ -106,6 +106,7 @@ def main(config_path: str = "config.yaml"):
         cfg = yaml.safe_load(f)
 
     # Setup experiment
+    torch.manual_seed(cfg["experiment"].get("seed", 42))
     run_name = f"{cfg['model']['type'].lower()}_{cfg['dataset']['type'].lower()}_{time.strftime('%Y%m%d-%H%M%S')}"
     run_dir = f"./eval_runs/{run_name}"
     logger.info(f"Saving intermidiate results to {run_dir}")

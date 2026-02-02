@@ -17,7 +17,7 @@ model:
     renormalise: true
     compile_vae: true
     schedule_type: "linear"
-  checkpoint: runs/latent_diffusion_celeb_hq_20260128-194006/epoch_221_copied.pth     # Use for evaluation or restarting training
+  checkpoint: runs/latent_diffusion_celeb_hq_20260130-104518/epoch_301_truncated.pth     # Use for evaluation or restarting training
 
 optimizer:                              
   type: "adamw"                          
@@ -36,7 +36,7 @@ training:
   save_after_epoch: 10                # Save all checkpoints after this epoch
 
 evaluation:
-  samples: 100                          # Only used for evaluation run
+  samples: 64                          # Only used for evaluation run
     
 dataset:
   type: "celeb_hq"                         # options: mnist (imagenet, coco, .. in future)

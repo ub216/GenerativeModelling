@@ -33,6 +33,7 @@ class FaceAligner:
         image_size: int = 64,
         device: str = "cuda",
         min_face_size: int = 40,
+        template: str = "celeb",
     ):
         self.image_size = image_size
         self.device = device
@@ -41,22 +42,34 @@ class FaceAligner:
         )
 
         # original celebA template (178x218)
-        train_template = np.array(
-            [[69, 111], [108, 111], [88, 135], [71, 152], [105, 152]], dtype=np.float32
-        )
+        if template == "celeb":
+            train_template = np.array(
+                [[69, 111], [108, 111], [88, 135], [71, 152], [105, 152]],
+                dtype=np.float32,
+            )
 
-        # simulate the training preprocessing steps:
-        # training logic: Take 178x218 -> Center Crop to 178x178 -> Resize to 64x64
-        # this means 20 pixels were removed from the top ( (218-178)/2 )
-        top_offset = (218 - 178) / 2
+            # simulate the training preprocessing steps:
+            # training logic: Take 178x218 -> Center Crop to 178x178 -> Resize to 64x64
+            # this means 20 pixels were removed from the top ( (218-178)/2 )
+            top_offset = (218 - 178) / 2
 
-        # Shift Y coordinates up by the offset
-        cropped_template = train_template.copy()
-        cropped_template[:, 1] -= top_offset
+            # Shift Y coordinates up by the offset
+            cropped_template = train_template.copy()
+            cropped_template[:, 1] -= top_offset
 
-        # normalise the crop box (178x178) to [0, image_size)
-        # now we divide by 178 for BOTH X and Y because it's a square crop
-        self.target_landmarks = (cropped_template / 178.0) * image_size
+            # normalise the crop box (178x178) to [0, image_size)
+            # now we divide by 178 for BOTH X and Y because it's a square crop
+            self.target_landmarks = (cropped_template / 178.0) * image_size
+
+        elif template == "celeb_hq":
+            # For 256x256 CelebA-HQ images
+            train_template = np.array(
+                [[99, 125], [162, 125], [135, 165], [101, 186], [155, 186]],
+                dtype=np.float32,
+            )
+            self.target_landmarks = (train_template / 256.0) * image_size
+        else:
+            raise ValueError(f"Unknown template type: {template}")
 
     def detect(self, img_bgr: np.ndarray):
         img_rgb = _to_rgb_uint8(img_bgr)
@@ -67,7 +80,7 @@ class FaceAligner:
         self,
         img_bgr,
         debug_save=False,
-        relaxation_scale=0.975,  # 0.925-0.975 matches CelebA distribution
+        relaxation_scale=1.0,  # 0.975,  # 0.925-0.975 matches CelebA distribution
     ):
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
         boxes, _, lms = self.mtcnn.detect(img_rgb, landmarks=True)

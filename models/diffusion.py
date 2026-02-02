@@ -117,10 +117,14 @@ class DiffusionModel(BaseModel):
 
         # TODO: SNR-weighted loss add as a config option
         # Compute SNR-weighted MSE loss weights
-        # alphas_cumprod = self.train_alphas_cumprod[time_steps]
-        # snr = alphas_cumprod / (1 - alphas_cumprod).clamp(min=1e-7)
-        # mse_loss_weights = torch.stack([snr, torch.ones_like(snr) * 5.0], dim=1).min(dim=1)[0]
-        return predicted_noise, noise  # , mse_loss_weights
+        if 0:
+            alphas_cumprod = self.train_alphas_cumprod[time_steps]
+            snr = alphas_cumprod / (1 - alphas_cumprod).clamp(min=1e-7)
+            mse_loss_weights = torch.stack(
+                [snr, torch.ones_like(snr) * 5.0], dim=1
+            ).min(dim=1)[0]
+            return predicted_noise, noise, mse_loss_weights
+        return predicted_noise, noise
 
     # -------------------------
     # Sampling (ancestral reverse diffusion)
