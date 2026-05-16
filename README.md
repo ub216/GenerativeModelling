@@ -11,7 +11,8 @@ As an example of its usage, we demonstrate image-to-video generation for facial 
 - Ready-to-use training and evaluation scripts
 - Extensible support for datasets (see [`loaders/`](loaders/))
 - Extensible loss and metric modules
-- Sampling with conditional guidance 
+- Sampling with conditional guidance
+- WandB for logging and monitoring expriments
 
 ## TODOs
 - [x] Add support for diffusion network
