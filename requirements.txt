@@ -13,3 +13,9 @@ accelerate --no-deps
 peft --no-deps
 imageio
 pytest
+
+# dev
+pre-commit
+black
+isort
+flake8
