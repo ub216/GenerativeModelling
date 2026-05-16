@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.datasets import CelebA
 
+from helpers.image_utils import get_transforms
 
 class CelebDataset(CelebA):
     def __init__(
@@ -86,25 +87,31 @@ class CelebDataset(CelebA):
 
     def _generate_caption(self, attr_values: torch.Tensor) -> str:
         """
-        Converts a tensor of 1/-1 into a comma-separated string.
+        Formats:
+        - No attributes: "photo of a face"
+        - With attributes: "photo of a smiling, young face"
         """
-        tags = []
+        present_tags = []
+
         for i, val in enumerate(attr_values):
-            label_name = self.selected_labels[i].replace(
-                "_", " "
-            )  # Clean up underscores
-
+            # CelebA labels are usually -1 (False) or 1 (True)
             if val > 0:
-                tags.append(label_name)
+                label_name = self.selected_labels[i].replace("_", " ")
+                present_tags.append(label_name)
             elif self.use_negation:
-                # Only add "no [attr]" if explicitly requested
-                tags.append(f"no {label_name}")
+                # Optional: If you still want negation, though for your
+                # current experiment "a photo of a face" is cleaner.
+                label_name = self.selected_labels[i].replace("_", " ")
+                present_tags.append(f"non-{label_name}")
 
-        # If no attributes are positive, return a generic prompt
-        if not tags:
-            return ""
+        if not present_tags:
+            return "photo of a face"
 
-        return ", ".join(tags)
+        # Join attributes with commas: "smiling, young"
+        attr_string = ", ".join(present_tags)
+
+        # Final prompt: "a photo of a smiling, young face"
+        return f"photo of a {attr_string} face"
 
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, str]:
         img, all_target = super(CelebDataset, self).__getitem__(index)
@@ -129,12 +136,20 @@ def get_celeb_dataloader(
     split: str = "all",
     attr_target: str = "all",
 ) -> DataLoader:
+    """
     transform = transforms.Compose(
         [
             transforms.CenterCrop(178),
             transforms.Resize(image_size),
             transforms.RandomHorizontalFlip(p=0.5),  # data augmentation
             transforms.ToTensor(),  # -> [0,1]
+        ]
+    )
+    """
+    transform = transforms.Compose(
+        [
+            transforms.CenterCrop(178),
+            get_transforms(image_size),
         ]
     )
     dataset = CelebDataset(
