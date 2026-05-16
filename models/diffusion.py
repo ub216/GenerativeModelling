@@ -31,6 +31,7 @@ class DiffusionModel(BaseModel):
         renormalise: bool = False,
         schedule_type: str = "cosine",  # linear or cosine
         use_attention: bool = False,
+        use_snr_weighting: bool = True,
         *args,
         **kwargs,
     ):
@@ -56,6 +57,7 @@ class DiffusionModel(BaseModel):
         self.sample_condition_weight = sample_condition_weight
         self.has_conditional_generation = text_emb_dim is not None
         self.renormalise = renormalise
+        self.use_snr_weighting = use_snr_weighting
 
         # Register Training Schedule as Buffers (Multi-GPU compatibility)
         train_sched = prepare_noise_schedule(
@@ -115,9 +117,7 @@ class DiffusionModel(BaseModel):
         x_noisy = self.q_sample(x0, time_steps, noise, mode="train")
         predicted_noise, _ = self.unet(x_noisy, time_steps, conditioning=conditioning)
 
-        # TODO: SNR-weighted loss add as a config option
-        # Compute SNR-weighted MSE loss weights
-        if 0:
+        if self.use_snr_weighting:
             alphas_cumprod = self.train_alphas_cumprod[time_steps]
             snr = alphas_cumprod / (1 - alphas_cumprod).clamp(min=1e-7)
             mse_loss_weights = torch.stack(

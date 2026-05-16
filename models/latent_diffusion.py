@@ -23,6 +23,7 @@ class LatentDiffusionModel(BaseModel):
         text_emb_dim: Optional[int] = None,
         timesteps: int = 1000,
         schedule_type: str = "cosine",
+        use_snr_weighting: bool = True,
         # VAE params
         renormalise: bool = True,
         vae_model_name: str = "stabilityai/sd-vae-ft-mse",
@@ -71,6 +72,7 @@ class LatentDiffusionModel(BaseModel):
             text_emb_dim=text_emb_dim,
             timesteps=timesteps,
             schedule_type=schedule_type,
+            use_snr_weighting=use_snr_weighting,
             device=device,
             renormalise=False,  # We handle scaling via the VAE
             *args,
