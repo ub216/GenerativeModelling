@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+from loguru import logger
+
 import helpers.custom_types as custom_types
 from models.backbone.residual_conv import ResidualConv
 from models.text_model import TextModel
@@ -24,11 +26,18 @@ class SimpleUNet(nn.Module):
         in_channels: int = 1,
         base_channels: int = 64,
         channel_mults: List[int] = [1, 2, 4],
+        num_blocks: int = 1,
         time_emb_dim: int = 128,
         text_emb_dim: Optional[int] = None,
         device: custom_types.DeviceType = "cuda",
     ):
         super().__init__()
+        _effective = num_blocks if isinstance(num_blocks, int) else max(num_blocks)
+        if _effective != 1:
+            logger.warning(
+                f"SimpleUNet received num_blocks={num_blocks} but only uses 1 block "
+                "per level. Use UNet (via DiffusionModel) for multi-block support."
+            )
         self.in_conv = nn.Conv2d(in_channels, base_channels, 3, padding=1)
         self.time_mlp = nn.Sequential(
             nn.Linear(time_emb_dim, time_emb_dim),

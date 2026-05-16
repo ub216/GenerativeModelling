@@ -64,6 +64,9 @@ class ResidualConv(nn.Module):
         self.intialise_zero()
 
     def intialise_zero(self):
+        # condition_projection is None when no conditioning dims are provided
+        if self.condition_projection is None:
+            return
         nn.init.zeros_(self.condition_projection[-1].weight)
         nn.init.zeros_(self.condition_projection[-1].bias)
 

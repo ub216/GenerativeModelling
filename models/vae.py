@@ -39,7 +39,7 @@ class VAE(BaseModel):
         for feat in feature_dims:
             enc_blocks.append(
                 ResidualConv(
-                    prev_c, feat, stride=2, dropout=dropout, bias=False, norm=False
+                    prev_c, feat, stride=2, dropout=dropout, bias=False
                 )
             )
             prev_c = feat
