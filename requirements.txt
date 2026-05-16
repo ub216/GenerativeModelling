@@ -12,3 +12,4 @@ facenet-pytorch --no-deps
 accelerate --no-deps
 peft --no-deps
 imageio
+pytest
