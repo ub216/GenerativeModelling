@@ -308,14 +308,18 @@ def main(config_path: str = "config.yaml"):
     start_epoch = 0
     if cfg["model"].get("checkpoint", None) is not None:
         ckpt = cfg["model"]["checkpoint"]
+        # weights_only=True: load model/EMA weights but skip optimizer state and epoch
+        # counter so stage-2 fine-tuning starts with a fresh optimizer and LR schedule
+        weights_only = cfg["model"].get("checkpoint_weights_only", False)
         checkpoint = torch.load(ckpt, map_location=cfg["training"]["device"])
         model.load_state_dict(checkpoint["model_state_dict"], strict=False)
         model_ema.load_state_dict(checkpoint["model_ema_state_dict"], strict=False)
-        if "optimizer_state_dict" in checkpoint:
-            optimizer_manager.load_state_dict(checkpoint["optimizer_state_dict"])
-        if "epoch" in checkpoint:
-            start_epoch = checkpoint["epoch"] + 1
-        logger.info(f"Loaded model checkpoint from {ckpt}")
+        if not weights_only:
+            if "optimizer_state_dict" in checkpoint:
+                optimizer_manager.load_state_dict(checkpoint["optimizer_state_dict"])
+            if "epoch" in checkpoint:
+                start_epoch = checkpoint["epoch"] + 1
+        logger.info(f"Loaded checkpoint from {ckpt} (weights_only={weights_only})")
 
     # Metrics
     compute_metrics = get_metrics(cfg.get("metrics", None))

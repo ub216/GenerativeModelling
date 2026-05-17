@@ -35,7 +35,7 @@ training:
   ema_decay: 0.9999                    # Set to 0 to disable EMA
   save_after_epoch: 10                # Save all checkpoints after this epoch
   amp_dtype: "auto"                     # "auto" | "bfloat16" | "float16" | "disabled"
-  sample_interval: 5                    # generate sample images every N epochs (independent of metric_interval)
+  sample_interval: 1                    # generate sample images every N epochs (independent of metric_interval)
 
 evaluation:
   samples: 64                          # Only used for evaluation run

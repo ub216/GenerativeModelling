@@ -16,12 +16,13 @@ model:
     sample_condition_weight: 10.0
     renormalise: true
     compile_vae: false                  # keep false — training.compile already compiles the full model; nesting compile_vae adds graph breaks with no gain
-  checkpoint: null                    # Use for evaluation or restarting training
+  checkpoint: "/data/repos/personal/GenerativeModelling/runs/latent_flow_celeb_20260517-120716/epoch_21.pth"                    # Stage 2: set to stage-1 checkpoint path
+  checkpoint_weights_only: true       # Skip optimizer state + epoch — keeps the fine-tuning LR below
 
 optimizer:
   type: "adamw"
   params:
-    lr: 0.0001
+    lr: 0.0001                         # 3× lower than stage 1 — fine-tuning at higher resolution
     weight_decay: 0.01
   accumulate_steps: 1
   max_grad_norm: 1.0
@@ -34,7 +35,7 @@ training:
   ema_decay: 0.9999
   save_after_epoch: 10
   amp_dtype: "auto"                     # "auto" | "bfloat16" | "float16" | "disabled"
-  sample_interval: 5                    # generate sample images every N epochs (independent of metric_interval)
+  sample_interval: 1                    # generate sample images every N epochs (independent of metric_interval)
   compile: true                         # torch.compile for kernel fusion (~20-30% speedup after warmup)
 
 evaluation:
