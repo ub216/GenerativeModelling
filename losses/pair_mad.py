@@ -33,7 +33,6 @@ class PairMADLoss(nn.Module):
         assert len(outputs) >= 2 and outputs[0].shape == outputs[1].shape, "Outputs and inputs must have the same shape"
         predicted, target = outputs[0], outputs[1]
 
-        # Calculate raw MSE per pixel
         loss = F.l1_loss(predicted, target, reduction="none")
 
         # Average over all dimensions except Batch: Result is [B]

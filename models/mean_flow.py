@@ -26,14 +26,14 @@ class MeanFlowModel(FlowModel):
         device: custom_types.DeviceType = "cuda",
         test_timesteps: Optional[int] = None,
         text_emb_dim: Optional[int] = None,
-        drop_condition_ratio: float = 0.25,
-        sample_condition_weight: int = 3,
+        drop_condition_ratio: float = 0.1,  # paper Sec 4.2: 10% unconditional training
+        sample_condition_weight: float = 1.0,  # ω in Eq 21; effective scale ω'=ω/(1-κ)=2.0 (ImageNet B/2 Table 4)
         renormalize: bool = False,
         use_attention: bool = False,
-        same_time_ratio: float = 0.25,
-        kappa: float = 0.5,
-        logit_sigma=1.0,
-        logit_mu=-0.4,
+        same_time_ratio: float = 0.75,  # fraction of batch where r=t is forced; ImageNet B/2: 75% (Table 4)
+        kappa: float = 0.5,  # κ in Eq 21; CFG mixing weight (ImageNet B/2 Table 4)
+        logit_sigma: float = 1.0,  # logit-normal σ; ImageNet B/2: lognorm(-0.4, 1.0) (Table 4)
+        logit_mu: float = -0.4,  # logit-normal μ; concentrates mass away from t=0 boundary
         *args,
         **kwargs,
     ):

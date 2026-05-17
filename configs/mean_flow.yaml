@@ -1,0 +1,55 @@
+experiment:
+  name: "MeanFlow"
+
+model:
+  type: "mean_flow"
+  params:
+    timesteps: 1000
+    test_timesteps: 1                  # MeanFlow enables one-step generation (arXiv:2505.13447)
+    # Time sampler: logit-normal lognorm(-0.4, 1.0) — ImageNet B/2 Table 4
+    logit_mu: -0.4
+    logit_sigma: 1.0
+    # Boundary condition ratio: 75% of batch has r=t forced (25% r≠t) — ImageNet B/2 Table 4
+    same_time_ratio: 0.75
+    # CFG parameters (Eq 21, Appendix B.1): effective guidance scale ω' = ω/(1-κ) = 2.0
+    text_emb_dim: null                 # Set to e.g. 128 to enable CFG
+    sample_condition_weight: 1.0       # ω = 1.0 (ImageNet B/2 Table 4)
+    kappa: 0.5                         # κ = 0.5 (ImageNet B/2 Table 4)
+    drop_condition_ratio: 0.1          # 10% unconditional training (Sec 4.2)
+  checkpoint: null                     # Use for evaluation or restarting training
+
+optimizer:
+  type: "adam"
+  params:
+    lr: 0.0001
+    weight_decay: 0.0
+
+training:
+  batch_size: 64
+  epochs: 50
+  device: "cuda"
+  metric_interval: 5
+  amp_dtype: "auto"                    # "auto" | "bfloat16" | "float16" | "disabled"
+  sample_interval: 1                   # generate sample images every N epochs
+
+evaluation:
+  samples: 100
+
+dataset:
+  type: "mnist"
+  params:
+    root: "/data/datasets/mnist/"
+    num_workers: 8
+    pin_memory: true
+    persistent_workers: true
+
+loss:
+  type: "pair_mad"                   # L1 loss; outperforms MSE for MeanFlow per paper ablation
+  params:
+    reduction: "mean"
+
+metrics:
+  fid:
+    type: "fid_inception"
+    params:
+      samples: 8000

@@ -40,6 +40,8 @@ def get_loss_function(cfg: Dict[str, Any]) -> torch.nn.Module:
     logger.info(f"Loss params: {params}")
     if name == "vae":
         return losses.VAELoss(**params)
+    elif name == "pair_mad":
+        return losses.PairMADLoss(**params)
     elif name == "pair_mse":
         return losses.PairMSELoss(**params)
     elif name == "pair_smooth":
@@ -104,6 +106,10 @@ def get_model(
     elif name == "latent_flow":
         return models.LatentFlowModel(**params), (
             models.EMAModel(models.LatentFlowModel(**params), decay=ema_decay) if build_ema else None
+        )
+    elif name == "mean_flow":
+        return models.MeanFlowModel(**params), (
+            models.EMAModel(models.MeanFlowModel(**params), decay=ema_decay) if build_ema else None
         )
     else:
         raise ValueError(f"Unknown model type: {name}")
