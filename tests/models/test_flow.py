@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from models.flow import FlowModel
 
 DEVICE = "cpu"
@@ -30,6 +31,7 @@ def batch():
 # FlowModel.q_sample — linear interpolation
 # ---------------------------------------------------------------------------
 
+
 class TestQSample:
     def test_at_t0_equals_x0(self, model, batch):
         x1 = torch.randn_like(batch)
@@ -57,6 +59,7 @@ class TestQSample:
 # ---------------------------------------------------------------------------
 # FlowModel.forward
 # ---------------------------------------------------------------------------
+
 
 class TestForward:
     def test_output_shapes(self, model, batch):
@@ -88,6 +91,7 @@ class TestForward:
 # FlowModel.valid_input_combination
 # ---------------------------------------------------------------------------
 
+
 class TestInputCombination:
     def test_uncond_model_accepts_none(self, model):
         assert model.valid_input_combination(None) is True
@@ -99,6 +103,7 @@ class TestInputCombination:
 # ---------------------------------------------------------------------------
 # FlowModel.sample
 # ---------------------------------------------------------------------------
+
 
 class TestSampling:
     def test_output_shape(self, model):
@@ -116,3 +121,51 @@ class TestSampling:
     def test_batch_size_larger_than_num_samples(self, model):
         samples = model.sample(2, DEVICE, image_size=8, batch_size=16)
         assert samples.shape == (2, 1, 8, 8)
+
+    def test_clamp_output_false_returns_correct_shape(self, model):
+        samples = model.sample(2, DEVICE, image_size=8, batch_size=2, clamp_output=False)
+        assert samples.shape == (2, 1, 8, 8)
+
+    def test_dynamic_threshold_false(self, model):
+        samples = model.sample(2, DEVICE, image_size=8, batch_size=2, dynamic_threshold=False)
+        assert samples.shape == (2, 1, 8, 8)
+
+    def test_threshold_coeff_inf_disables_thresholding(self, model):
+        samples = model.sample(2, DEVICE, image_size=8, batch_size=2, threshold_coeff=float("inf"))
+        assert samples.shape == (2, 1, 8, 8)
+
+    def test_multichannel_output_shape(self):
+        """in_channels is used for sampling, not a hardcoded default."""
+        m = FlowModel(**{**_KWARGS, "in_channels": 3})
+        samples = m.sample(2, DEVICE, image_size=8, batch_size=2)
+        assert samples.shape == (2, 3, 8, 8)
+
+
+# ---------------------------------------------------------------------------
+# FlowModel with use_attention
+# ---------------------------------------------------------------------------
+
+
+class TestAttentionBackbone:
+    def test_forward_with_attention(self):
+        m = FlowModel(**{**_KWARGS, "use_attention": True})
+        batch = torch.rand(2, 1, 8, 8)
+        pred_flow, flow = m(batch)
+        assert pred_flow.shape == batch.shape
+
+    def test_sample_with_attention(self):
+        m = FlowModel(**{**_KWARGS, "use_attention": True})
+        samples = m.sample(2, DEVICE, image_size=8, batch_size=2)
+        assert samples.shape == (2, 1, 8, 8)
+
+
+# ---------------------------------------------------------------------------
+# FlowModel._dynamic_threshold
+# ---------------------------------------------------------------------------
+
+
+class TestDynamicThreshold:
+    def test_inf_coeff_returns_input_unchanged(self, model):
+        x = torch.randn(2, 1, 8, 8)
+        result = model._dynamic_threshold(x, c=float("inf"))
+        assert result is x

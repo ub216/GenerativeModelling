@@ -6,7 +6,7 @@ from loguru import logger
 
 import helpers.custom_types as custom_types
 from helpers.diffusion_utils import drop_condition
-from models.backbone.simple_unet import SimpleUNet
+from models.backbone.unet import UNet
 from models.base_model import BaseModel
 
 
@@ -28,11 +28,12 @@ class FlowModel(BaseModel):
         drop_condition_ratio: float = 0.25,
         sample_condition_weight: int = 10,
         renormalize: bool = False,
+        use_attention: bool = False,
         *args,
         **kwargs,
     ):
         super().__init__()
-        self.unet = SimpleUNet(
+        self.unet = UNet(
             in_channels,
             base_channels,
             channel_mults,
@@ -40,12 +41,11 @@ class FlowModel(BaseModel):
             time_emb_dim=time_emb_dim,
             text_emb_dim=text_emb_dim,
             device=device,
+            use_attention=use_attention,
         )
-        self.device = device
+        self.in_channels = in_channels
         self.timesteps = timesteps
-        self.test_timesteps = (
-            test_timesteps if test_timesteps is not None else timesteps
-        )
+        self.test_timesteps = test_timesteps if test_timesteps is not None else timesteps
         self.test_delta = 1 / self.test_timesteps
         self.text_emb_dim = text_emb_dim
         self.drop_condition_ratio = drop_condition_ratio
@@ -74,11 +74,10 @@ class FlowModel(BaseModel):
 
         if time_steps is None:
             b = x0.shape[0]
-            time_steps = torch.rand(b, device=self.device)
+            time_steps = torch.rand(b, device=x0.device)
         if x1 is None:
             x1 = torch.randn_like(x0)
         if conditioning is not None:
-            # Randomly drop condition to train model for unconditioned input
             conditioning = drop_condition(conditioning, self.drop_condition_ratio)
 
         intermidiate = self.q_sample(x0, time_steps, x1)
@@ -93,19 +92,31 @@ class FlowModel(BaseModel):
         image_size: int | Tuple[int, int],
         batch_size: int = 16,
         conditioning: Optional[List[str]] = None,
+        dynamic_threshold: bool = True,
+        threshold_coeff: float = 1.0,
+        clamp_output: bool = True,
         *args,
         **kwargs,
     ) -> torch.Tensor:
         assert conditioning is None or len(conditioning) == num_samples
-        # Ensure image_size is a tuple
         if isinstance(image_size, int):
             image_size = (image_size, image_size)
-        # Ensure conditioning is set up
         if conditioning is None and self.has_conditional_generation:
             conditioning = [""] * num_samples
-        return self.sample_flow(
-            num_samples, device, image_size, batch_size, conditioning=conditioning
+        samples = self.sample_flow(
+            num_samples,
+            device,
+            image_size,
+            batch_size,
+            conditioning=conditioning,
+            dynamic_threshold=dynamic_threshold,
+            threshold_coeff=threshold_coeff,
         )
+        if self.renormalize:
+            samples = (samples + 1.0) / 2.0
+        if clamp_output:
+            samples = samples.clamp(0.0, 1.0)
+        return samples
 
     @torch.no_grad()
     def sample_flow(
@@ -114,18 +125,18 @@ class FlowModel(BaseModel):
         device: custom_types.DeviceType,
         image_size: Tuple[int, int],
         batch_size: int = 16,
-        channels: int = 1,
         conditioning: Optional[List[str]] = None,
-    ):
+        dynamic_threshold: bool = True,
+        threshold_coeff: float = 1.0,
+    ) -> torch.Tensor:
         """
         Generate samples by iteratively predicting the flow.
         num_samples: int
         device: torch device
-        image_size: int (assumes square images)
+        image_size: (H, W) tuple
         batch_size: int
-        channels: output channels (C)
         conditioning: input conditioning
-        returns: (num_samples, C, H, W) tensor of generated images
+        returns: (num_samples, C, H, W) raw tensor (not clamped or renormalized)
         """
         if not self.valid_input_combination(conditioning):
             raise ValueError("Invalid input combination")
@@ -134,82 +145,57 @@ class FlowModel(BaseModel):
         samples = []
         for idx in range(math.ceil(num_samples / batch_size)):
             cur_bs = min(batch_size, num_samples - len(samples))
-            x_t = torch.randn(
-                cur_bs, channels, image_size[0], image_size[1], device=device
-            )
+            x_t = torch.randn(cur_bs, self.in_channels, image_size[0], image_size[1], device=device)
 
-            cond_batch = (
-                conditioning[idx * batch_size : idx * batch_size + cur_bs]
-                if conditioning
-                else None
-            )
+            cond_batch = conditioning[idx * batch_size : idx * batch_size + cur_bs] if conditioning else None
             uncond_batch = [""] * cur_bs if self.has_conditional_generation else None
 
             for t in reversed(range(self.test_timesteps)):
                 vec_t = torch.full((cur_bs,), t * self.test_delta, device=device)
 
                 if self.has_conditional_generation:
-                    # We double the batch size to do cond and uncond in ONE pass
                     batched_x = torch.cat([x_t, x_t], dim=0)
                     batched_t = torch.cat([vec_t, vec_t], dim=0)
                     batched_cond = cond_batch + uncond_batch
 
-                    # Single forward pass
-                    batched_flow, _ = self.unet(
-                        batched_x, batched_t, conditioning=batched_cond
-                    )
+                    batched_flow, _ = self.unet(batched_x, batched_t, conditioning=batched_cond)
 
-                    # Split the results back
                     flow_cond, flow_uncond = batched_flow.chunk(2)
-
-                    # Apply Guidance
-                    flow = flow_uncond + self.sample_condition_weight * (
-                        flow_cond - flow_uncond
-                    )
+                    flow = flow_uncond + self.sample_condition_weight * (flow_cond - flow_uncond)
                 else:
                     flow, _ = self.unet(x_t, vec_t)
 
-                # dynamic thresholding to avoid exploding values
                 current_t = t * self.test_delta
                 pred_x0 = x_t - current_t * flow
-                pred_x0_thresholded = self._dynamic_threshold(pred_x0)
+                if dynamic_threshold:
+                    pred_x0 = self._dynamic_threshold(pred_x0, c=threshold_coeff)
+                else:
+                    pred_x0 = pred_x0.clamp(-threshold_coeff, threshold_coeff)
                 if current_t > 0:
-                    flow = (x_t - pred_x0_thresholded) / current_t
+                    flow = (x_t - pred_x0) / current_t
 
-                # Euler step
                 x_t -= flow * self.test_delta
 
-            samples.append(x_t.cpu())
-        samples = torch.cat(samples, dim=0)[:num_samples]
-        self.unet.train()
-        if self.renormalize:
-            return (samples + 1.0) / 2.0  # to [0, 1]
-        return samples.clamp(0.0, 1.0)  # adjust if dataset is [-1,1]
+            samples.append(x_t)
 
-    def _dynamic_threshold(
-        self, x0: torch.Tensor, p: float = 0.995, c: float = 1.0
-    ) -> torch.Tensor:
+        self.unet.train()
+        return torch.cat(samples, dim=0)[:num_samples]
+
+    def _dynamic_threshold(self, x0: torch.Tensor, p: float = 0.995, c: float = 1.0) -> torch.Tensor:
         """
         x0: (B, C, H, W) - The predicted clean image
         p: Percentile (usually 0.995)
         c: Target threshold (usually 1.0)
         """
-        batch_size, channels, height, width = x0.shape
-        # Flatten to (batch, pixels) to find quantile per image
+        if c == float("inf"):
+            return x0
+        batch_size = x0.shape[0]
         x_flat = x0.reshape(batch_size, -1)
-
-        # Calculate the s-th percentile of the absolute values
         s = torch.quantile(torch.abs(x_flat), p, dim=1)
-
-        # Only scale if the s-th percentile is greater than the target threshold 'c'
         s = torch.clamp(s, min=c).view(batch_size, 1, 1, 1)
-
-        # Clamp to [-s, s] and then divide by s to bring back to [-1, 1]
         return torch.clamp(x0, -s, s) / s
 
-    def q_sample(
-        self, x0: torch.Tensor, t: torch.Tensor, x1: torch.Tensor
-    ) -> torch.Tensor:
+    def q_sample(self, x0: torch.Tensor, t: torch.Tensor, x1: torch.Tensor) -> torch.Tensor:
         """
         x0: (B,C,H,W)
         t: (B,) float in [0,1]
