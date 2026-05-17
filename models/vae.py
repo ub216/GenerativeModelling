@@ -37,11 +37,7 @@ class VAE(BaseModel):
         enc_blocks = []
         prev_c = in_channels
         for feat in feature_dims:
-            enc_blocks.append(
-                ResidualConv(
-                    prev_c, feat, stride=2, dropout=dropout, bias=False
-                )
-            )
+            enc_blocks.append(ResidualConv(prev_c, feat, stride=2, dropout=dropout, bias=False))
             prev_c = feat
         self.encoder_conv = nn.Sequential(*enc_blocks)
 
@@ -49,9 +45,7 @@ class VAE(BaseModel):
         reduced_size = image_size // (2 ** len(feature_dims))
         conv_out_dim = feature_dims[-1] * reduced_size * reduced_size
 
-        self.encoder_fc = nn.Sequential(
-            nn.Flatten(), nn.Linear(conv_out_dim, hidden_dim), nn.ReLU()
-        )
+        self.encoder_fc = nn.Sequential(nn.Flatten(), nn.Linear(conv_out_dim, hidden_dim), nn.ReLU())
 
         # latent variables
         self.z_mean = nn.Linear(hidden_dim, latent_dim)
@@ -93,9 +87,7 @@ class VAE(BaseModel):
         self.decoder_conv = nn.Sequential(*dec_blocks)
 
     # ---------- Latent sampling ----------
-    def random_sample(
-        self, z_mean: torch.Tensor, z_logvar: torch.Tensor
-    ) -> torch.Tensor:
+    def random_sample(self, z_mean: torch.Tensor, z_logvar: torch.Tensor) -> torch.Tensor:
         eps = torch.randn_like(z_mean)
         return z_mean + torch.exp(0.5 * z_logvar) * eps
 
@@ -114,9 +106,7 @@ class VAE(BaseModel):
 
         return out, z_mean, z_logvar
 
-    def sample(
-        self, num_samples: int, device: custom_types.DeviceType, *args, **kwargs
-    ):
+    def sample(self, num_samples: int, device: custom_types.DeviceType, *args, **kwargs):
         z = torch.randn(num_samples, self.latent_dim).to(device)
         h_dec = self.decoder_fc(z)
         out = self.decoder_conv(h_dec)

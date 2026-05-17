@@ -16,9 +16,7 @@ class DiTBlock(torch.nn.Module):
     ):
         super().__init__()
         # attention block
-        self.attention = torch.nn.MultiheadAttention(
-            embed_dim=in_channels, num_heads=num_heads, batch_first=True
-        )
+        self.attention = torch.nn.MultiheadAttention(embed_dim=in_channels, num_heads=num_heads, batch_first=True)
         self.norm = torch.nn.LayerNorm(in_channels, elementwise_affine=False)
 
         # always define time_mlp
@@ -26,15 +24,11 @@ class DiTBlock(torch.nn.Module):
 
         cond_in_dim = time_emb_dim
         if text_emb_dim is not None:
-            self.text_mlp = nn.Sequential(
-                nn.SiLU(), nn.Linear(text_emb_dim, text_emb_dim)
-            )
+            self.text_mlp = nn.Sequential(nn.SiLU(), nn.Linear(text_emb_dim, text_emb_dim))
             cond_in_dim += text_emb_dim
 
         # use 6 * in_channels to scale every channel individually
-        self.condition_projection = nn.Sequential(
-            nn.SiLU(), nn.Linear(cond_in_dim, 6 * in_channels)
-        )
+        self.condition_projection = nn.Sequential(nn.SiLU(), nn.Linear(cond_in_dim, 6 * in_channels))
 
         self.ffn = nn.Sequential(
             nn.Linear(in_channels, in_channels * 4),

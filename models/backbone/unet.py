@@ -80,19 +80,13 @@ class UNet(nn.Module):
                 )
 
             self.encs.append(stage_blocks)
-            self.downs.append(
-                nn.Conv2d(out_ch, out_ch, kernel_size=3, stride=2, padding=1)
-            )
+            self.downs.append(nn.Conv2d(out_ch, out_ch, kernel_size=3, stride=2, padding=1))
             ch = out_ch
 
         # Bottleneck
         if not use_attention:
-            self.mid1 = ResidualConv(
-                ch, ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim
-            )
-            self.mid2 = ResidualConv(
-                ch, ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim
-            )
+            self.mid1 = ResidualConv(ch, ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim)
+            self.mid2 = ResidualConv(ch, ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim)
         else:
             self.mid1 = DiTBlock(
                 in_channels=ch,
@@ -107,13 +101,9 @@ class UNet(nn.Module):
                 text_emb_dim=text_emb_dim,
             )
             bottleneck_grid = max_image_size // (2 ** len(channel_mults))
-            pos_embed = get_2d_sincos_pos_embed(
-                ch, max_image_size // (2 ** len(channel_mults))
-            )
+            pos_embed = get_2d_sincos_pos_embed(ch, max_image_size // (2 ** len(channel_mults)))
             pos_embed = pos_embed.view(1, bottleneck_grid, bottleneck_grid, ch)
-            log_once_info(
-                f"pos_embed shape: {pos_embed.shape} for bottleneck size {bottleneck_grid}"
-            )
+            log_once_info(f"pos_embed shape: {pos_embed.shape} for bottleneck size {bottleneck_grid}")
             self.register_buffer("pos_embed", pos_embed)  # (1, h, w, c)
 
         # Decoder
@@ -124,9 +114,7 @@ class UNet(nn.Module):
 
         for i, mult in enumerate(rev_mults):
             out_ch = base_channels * mult
-            self.ups.append(
-                nn.ConvTranspose2d(ch, out_ch, kernel_size=4, stride=2, padding=1)
-            )
+            self.ups.append(nn.ConvTranspose2d(ch, out_ch, kernel_size=4, stride=2, padding=1))
 
             stage_blocks = nn.ModuleList()
             for b in range(rev_blocks[i]):
@@ -162,11 +150,7 @@ class UNet(nn.Module):
         # Compute text_emb on the conditioning only if they haven't
         # been computed before. Else use the ones that are provided
         # as input. Helps reduce computation while sampling
-        if (
-            text_emb is None
-            and conditioning is not None
-            and self.text_model is not None
-        ):
+        if text_emb is None and conditioning is not None and self.text_model is not None:
             text_emb = self.text_model(conditioning)
 
         ys = []
@@ -180,17 +164,11 @@ class UNet(nn.Module):
             y = down(y)
 
         if self.use_attention:
-            log_once_info(
-                f"Using attention in the bottleneck of UNet with bottleneck shape {y.shape}"
-            )
+            log_once_info(f"Using attention in the bottleneck of UNet with bottleneck shape {y.shape}")
             b, c, h, w = y.shape
             y = y.view(b, c, h * w).permute(0, 2, 1)  # (b, seq_len, c)
-            log_once_info(
-                f"Reshaped bottleneck to {y.shape} for attention, pos_embed shape: {self.pos_embed.shape}"
-            )
-            curr_pos = self.pos_embed[:, :h, :w, :].reshape(
-                1, h * w, c
-            )  # (1, seq_len, c)
+            log_once_info(f"Reshaped bottleneck to {y.shape} for attention, pos_embed shape: {self.pos_embed.shape}")
+            curr_pos = self.pos_embed[:, :h, :w, :].reshape(1, h * w, c)  # (1, seq_len, c)
             y = y + curr_pos
 
         # Bottleneck

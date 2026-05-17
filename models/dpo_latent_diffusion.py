@@ -9,20 +9,10 @@ from models.latent_diffusion import LatentDiffusionModel
 
 
 class DPOLatentDiffusionModel(LatentDiffusionModel):
-    def __init__(
-        self,
-        lora_rank: int = 8,
-        lora_alpha: int = 16,
-        lora_dropout=0.05,
-        *args,
-        **kwargs
-    ):
+    def __init__(self, lora_rank: int = 8, lora_alpha: int = 16, lora_dropout=0.05, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if (
-            not hasattr(self.model.unet, "use_attention")
-            or not self.model.unet.use_attention
-        ):
+        if not hasattr(self.model.unet, "use_attention") or not self.model.unet.use_attention:
             logger.warning("DPO training works best with attention blocks enabled.")
 
         # setup Reference Model
@@ -73,14 +63,10 @@ class DPOLatentDiffusionModel(LatentDiffusionModel):
         noise = torch.repeat_interleave(noise_half, 2, dim=0)
 
         # policy Pass (Trainable LoRA weights)
-        pol_pred, target_noise = self.model(
-            latents, time_steps=t, noise=noise, conditioning=conditioning
-        )
+        pol_pred, target_noise = self.model(latents, time_steps=t, noise=noise, conditioning=conditioning)
 
         # reference Pass (Original frozen weights)
         with torch.no_grad():
-            ref_pred, _ = self.ref_model(
-                latents, time_steps=t, noise=noise, conditioning=conditioning
-            )
+            ref_pred, _ = self.ref_model(latents, time_steps=t, noise=noise, conditioning=conditioning)
 
         return (pol_pred, ref_pred, target_noise)

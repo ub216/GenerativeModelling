@@ -1,6 +1,7 @@
 import pytest
 import torch
 import torch.nn as nn
+
 from helpers.optimizer_manager import OptimizerManager
 
 
@@ -76,14 +77,13 @@ def test_step_force_updates_immediately(simple_model):
 
 def test_backward_divides_loss_by_accumulate_steps(simple_model):
     """Gradient should be halved when accumulate_steps=2 vs accumulate_steps=1."""
+
     def get_grad(accumulate_steps):
         m = nn.Linear(4, 2)
         nn.init.ones_(m.weight)
         nn.init.zeros_(m.bias)
         opt = torch.optim.Adam(m.parameters(), lr=0.0)  # no update
-        manager = OptimizerManager(
-            {"all": opt}, model=m, use_scaler=False, accumulate_steps=accumulate_steps
-        )
+        manager = OptimizerManager({"all": opt}, model=m, use_scaler=False, accumulate_steps=accumulate_steps)
         torch.manual_seed(1)
         x = torch.rand(2, 4)
         loss = m(x).sum()
@@ -103,9 +103,7 @@ def test_state_dict_roundtrip(simple_model):
     state = manager.state_dict()
 
     opt2 = torch.optim.Adam(simple_model.parameters(), lr=1e-2)
-    manager2 = OptimizerManager(
-        {"all": opt2}, model=simple_model, use_scaler=False
-    )
+    manager2 = OptimizerManager({"all": opt2}, model=simple_model, use_scaler=False)
     manager2.load_state_dict(state)
 
     for key in state:

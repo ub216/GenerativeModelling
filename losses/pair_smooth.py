@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -8,9 +8,7 @@ import helpers.custom_types as custom_types
 
 
 class PairSmoothLoss(nn.Module):
-    def __init__(
-        self, reduction: custom_types.ReductionType = "mean", beta: float = 1.0
-    ):
+    def __init__(self, reduction: custom_types.ReductionType = "mean", beta: float = 1.0):
         super().__init__()
         assert reduction in [
             "sum",
@@ -20,10 +18,7 @@ class PairSmoothLoss(nn.Module):
         self.beta = beta
 
     def forward(
-        self,
-        outputs: Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]],
-        *args,
-        **kwargs
+        self, outputs: Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]], *args, **kwargs
     ) -> torch.Tensor:
         """
         Computes the Pair Smooth L1 Loss with optional weighting.
@@ -36,9 +31,7 @@ class PairSmoothLoss(nn.Module):
             torch.Tensor: The computed loss value.
         """
 
-        assert (
-            len(outputs) >= 2 and outputs[0].shape == outputs[1].shape
-        ), "Outputs and inputs must have the same shape"
+        assert len(outputs) >= 2 and outputs[0].shape == outputs[1].shape, "Outputs and inputs must have the same shape"
         predicted, target = outputs[0], outputs[1]
 
         # Calculate raw MSE per pixel

@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from losses.gan_hinge_loss import GANHingeLoss
 
 

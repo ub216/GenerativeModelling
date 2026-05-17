@@ -1,10 +1,8 @@
-from typing import Dict, Optional, Tuple
+from typing import Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-import helpers.custom_types as custom_types
 
 
 class InterleavedDPOLoss(nn.Module):
@@ -12,9 +10,7 @@ class InterleavedDPOLoss(nn.Module):
         super().__init__()
         self.beta = beta
 
-    def forward(
-        self, outputs: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], *args, **kwargs
-    ):
+    def forward(self, outputs: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], *args, **kwargs):
         """
         Computes the DPO Loss assuming data is interleaved as [W1, L1, W2, L2, ...].
         Args:
@@ -25,20 +21,14 @@ class InterleavedDPOLoss(nn.Module):
         Returns:
             torch.Tensor: The computed loss value.
         """
-        assert (
-            len(outputs) == 3 and pol_pred.shape == ref_pred.shape == target_noise.shape
-        ), "Outputs must contain policy predictions, reference predictions, and target noise"
-
+        assert len(outputs) == 3, "Outputs must contain policy predictions, reference predictions, and target noise"
         pol_pred, ref_pred, target_noise = outputs
+        assert pol_pred.shape == ref_pred.shape == target_noise.shape, "Output tensors must have the same shape"
 
         # calculate Per-Sample MSE [B_total]
         # B_total is 2 * batch_size_pairs
-        pol_err = F.mse_loss(pol_pred, target_noise, reduction="none").mean(
-            dim=[1, 2, 3]
-        )
-        ref_err = F.mse_loss(ref_pred, target_noise, reduction="none").mean(
-            dim=[1, 2, 3]
-        )
+        pol_err = F.mse_loss(pol_pred, target_noise, reduction="none").mean(dim=[1, 2, 3])
+        ref_err = F.mse_loss(ref_pred, target_noise, reduction="none").mean(dim=[1, 2, 3])
 
         reward = ref_err - pol_err
         # Assumes Interleaving: [W1, L1, W2, L2, ...]

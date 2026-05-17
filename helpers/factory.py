@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import torch
 from loguru import logger
@@ -17,13 +17,10 @@ def get_dataset(cfg: Dict[str, Any], batch_size=None) -> torch.utils.data.DataLo
     logger.info(f"Dataset params: {params}")
     if batch_size is not None and "batch_size" not in params:
         params["batch_size"] = batch_size
-    elif (
-        "batch_size" in params
-        and batch_size is not None
-        and params["batch_size"] != batch_size
-    ):
+    elif "batch_size" in params and batch_size is not None and params["batch_size"] != batch_size:
         logger.warning(
-            f"Warning: Overriding batch_size from {params['batch_size']} to {batch_size} as training batch size is provided."
+            f"Warning: Overriding batch_size from {params['batch_size']} to {batch_size} "
+            "as training batch size is provided."
         )
         params["batch_size"] = batch_size
 
@@ -66,65 +63,43 @@ def get_model(
         example_imgs, _ = next(iter(dataloader))
         _, c, h, w = example_imgs.shape
     else:
-        raise ValueError(
-            "Either image_size or dataloader must be provided to infer image size."
-        )
+        raise ValueError("Either image_size or dataloader must be provided to infer image size.")
     name = cfg["type"].lower()
     params = cfg.get("params", {})
 
     # Compare image_size given in cfg and loaded from dataloader
     # We only consdier square images
     if params.get("image_size", None) is not None and params["image_size"] != h:
-        logger.warning(
-            f"Overriding model image_size to {h} similar to the input recived from Dataloader"
-        )
+        logger.warning(f"Overriding model image_size to {h} similar to the input recived from Dataloader")
     params["image_size"] = h
 
     # Compare in_channels given in cfg and loaded from dataloader
     if params.get("in_channels", None) is not None and params["in_channels"] != c:
-        logger.warning(
-            f"Overriding model in_channels to {c} similar to the input recived from Dataloader"
-        )
+        logger.warning(f"Overriding model in_channels to {c} similar to the input recived from Dataloader")
     params["in_channels"] = c
 
     logger.info(f"Model params: {params}")
     if name == "vae":
-        assert h == w, f"VAE implementation can only handle square images for now"
-        return models.VAE(**params), (
-            models.EMAModel(models.VAE(**params), decay=ema_decay)
-            if build_ema
-            else None
-        )
+        assert h == w, "VAE implementation can only handle square images for now"
+        return models.VAE(**params), (models.EMAModel(models.VAE(**params), decay=ema_decay) if build_ema else None)
     if name == "gan":
-        assert h == w, f"GAN implementation can only handle square images for now"
-        return models.GAN(**params), (
-            models.EMAModel(models.GAN(**params), decay=ema_decay)
-            if build_ema
-            else None
-        )
+        assert h == w, "GAN implementation can only handle square images for now"
+        return models.GAN(**params), (models.EMAModel(models.GAN(**params), decay=ema_decay) if build_ema else None)
     elif name == "diffusion":
         return models.DiffusionModel(**params), (
-            models.EMAModel(models.DiffusionModel(**params), decay=ema_decay)
-            if build_ema
-            else None
+            models.EMAModel(models.DiffusionModel(**params), decay=ema_decay) if build_ema else None
         )
     elif name == "flow":
         return models.FlowModel(**params), (
-            models.EMAModel(models.FlowModel(**params), decay=ema_decay)
-            if build_ema
-            else None
+            models.EMAModel(models.FlowModel(**params), decay=ema_decay) if build_ema else None
         )
     elif name == "latent_diffusion":
         return models.LatentDiffusionModel(**params), (
-            models.EMAModel(models.LatentDiffusionModel(**params), decay=ema_decay)
-            if build_ema
-            else None
+            models.EMAModel(models.LatentDiffusionModel(**params), decay=ema_decay) if build_ema else None
         )
     elif name == "dpo_latent_diffusion":
         return models.DPOLatentDiffusionModel(**params), (
-            models.EMAModel(models.DPOLatentDiffusionModel(**params), decay=ema_decay)
-            if build_ema
-            else None
+            models.EMAModel(models.DPOLatentDiffusionModel(**params), decay=ema_decay) if build_ema else None
         )
     else:
         raise ValueError(f"Unknown model type: {name}")
@@ -146,9 +121,7 @@ def get_metrics(cfg: Dict[str, Any]) -> List[torch.nn.Module]:
     return metric
 
 
-def _get_optimizer(
-    name: str, paramertes, options: Dict[str, Any]
-) -> torch.optim.Optimizer:
+def _get_optimizer(name: str, paramertes, options: Dict[str, Any]) -> torch.optim.Optimizer:
     if name.lower() == "adam":
         return torch.optim.Adam(params=paramertes, **options)
     elif name.lower() == "adamw":
@@ -157,24 +130,16 @@ def _get_optimizer(
         raise ValueError(f"Unknown optimizer: {name}")
 
 
-def get_optimizer_manager(
-    cfg: Dict[str, Any], model: custom_types.GenBaseModel
-) -> OptimizerManager:
+def get_optimizer_manager(cfg: Dict[str, Any], model: custom_types.GenBaseModel) -> OptimizerManager:
     optimizer = {}
     if "type" in cfg:
         # single optimizer for all parameters
-        optimizer["all"] = _get_optimizer(
-            cfg["type"], model.parameters(), cfg.get("params", {})
-        )
+        optimizer["all"] = _get_optimizer(cfg["type"], model.parameters(), cfg.get("params", {}))
     else:
         for name, key in cfg.items():
             module = getattr(model, name, None)
-            assert (
-                module is not None
-            ), f"{module} does not exists in model parameter groups"
-            optimizer[name] = _get_optimizer(
-                key["type"], module.parameters(), key.get("params", {})
-            )
+            assert module is not None, f"{module} does not exists in model parameter groups"
+            optimizer[name] = _get_optimizer(key["type"], module.parameters(), key.get("params", {}))
     optimizer_manager = OptimizerManager(
         optimizer,
         model=model,

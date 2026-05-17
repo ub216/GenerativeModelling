@@ -2,7 +2,7 @@ import argparse
 import os
 import shutil
 import time
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import torch
 import yaml
@@ -46,9 +46,7 @@ def eval_sample(
             )
         else:
             # unconditional sampling
-            samples = model.sample(
-                num_samples, device, image_size, batch_size=num_samples
-            )
+            samples = model.sample(num_samples, device, image_size, batch_size=num_samples)
 
     # log a few images
     samples_cpu = samples.cpu()
@@ -76,7 +74,7 @@ def eval(
         dataloader=dataloader,
     )
     for metric in compute_metrics:
-        if type(metric) == metrics.FIDInception:
+        if isinstance(metric, metrics.FIDInception):
             sampler_loader = model.wrap_sampler_to_loader(
                 num_samples=metric.samples,
                 device=device,
@@ -94,9 +92,7 @@ def main(config_path: str = "config.yaml"):
     parser = argparse.ArgumentParser(description="Evaluate generative model")
     parser.add_argument("--config", type=str, required=True, help="Config file path")
     parser.add_argument("--image_size", type=int, default=None, help="Model image size")
-    parser.add_argument(
-        "--image_channels", type=int, default=None, help="Model image channels"
-    )
+    parser.add_argument("--image_channels", type=int, default=None, help="Model image channels")
     args = parser.parse_args()
     config_path = args.config
     assert os.path.isfile(config_path), f"Config file {config_path} not found"
@@ -116,18 +112,12 @@ def main(config_path: str = "config.yaml"):
     # Setup model
     if args.image_size is not None and args.image_channels is not None:
         image_size = (args.image_size, args.image_size, args.image_channels)
-        model, _ = get_model(
-            cfg["model"], dataloader=None, image_size=image_size, build_ema=False
-        )
+        model, _ = get_model(cfg["model"], dataloader=None, image_size=image_size, build_ema=False)
     elif cfg["dataset"].get("type", None) is not None:
-        dataloader = get_dataset(
-            cfg["dataset"], cfg["training"].get("batch_size", None)
-        )
+        dataloader = get_dataset(cfg["dataset"], cfg["training"].get("batch_size", None))
         model, _ = get_model(cfg["model"], dataloader=dataloader, build_ema=False)
     else:
-        raise ValueError(
-            "Either dataset type or image_size and image_channels must be provided."
-        )
+        raise ValueError("Either dataset type or image_size and image_channels must be provided.")
 
     # Load checkpoint
     if cfg["model"].get("checkpoint", None) is not None:

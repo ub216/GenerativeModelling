@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from losses.vae import VAELoss
 
 

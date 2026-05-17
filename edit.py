@@ -1,6 +1,6 @@
 import argparse
 import os
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import cv2
 import imageio
@@ -23,9 +23,7 @@ from helpers.factory import get_model
 from models.base_model import BaseModel
 
 
-def preprocess_for_model(
-    rgb64: np.ndarray, renormalise: bool, device: str, encode_fn=None
-) -> torch.Tensor:
+def preprocess_for_model(rgb64: np.ndarray, renormalise: bool, device: str, encode_fn=None) -> torch.Tensor:
     x = torch.from_numpy(rgb64).float() / 255.0  # (H,W,C)
     x = x.permute(2, 0, 1).unsqueeze(0)  # (1,C,H,W)
     if renormalise:
@@ -37,9 +35,7 @@ def preprocess_for_model(
     return x.to(device)
 
 
-def postprocess_from_model(
-    xT: torch.Tensor, renormalise: bool, decode_fn=None
-) -> np.ndarray:
+def postprocess_from_model(xT: torch.Tensor, renormalise: bool, decode_fn=None) -> np.ndarray:
     if decode_fn is not None:
         with torch.no_grad():
             x = decode_fn(xT)
@@ -238,9 +234,7 @@ def make_progressive_video(
 
     # invert ONCE to get the starting noise
     print("Inverting...")
-    xT_base = ddim_invert(
-        model, x0, inv_cond, inc_pairs=inc_pairs, device="cuda", clamp_pred=clamp_pred
-    )
+    xT_base = ddim_invert(model, x0, inv_cond, inc_pairs=inc_pairs, device="cuda", clamp_pred=clamp_pred)
 
     # get Reference Embedding (Identity)
     with torch.no_grad():
@@ -439,22 +433,18 @@ if __name__ == "__main__":
         plt.title("Input")
         plt.subplot(1, 2, 2)
         plt.axis("off")
-        plt.title(
-            f"Prompt: {args.prompt} \n Similarity: {sim_score:.4f} (using FaceNet)"
-        )
+        plt.title(f"Prompt: {args.prompt} \n Similarity: {sim_score:.4f} (using FaceNet)")
         plt.imshow(cv2.cvtColor(out, cv2.COLOR_BGR2RGB))
 
         plt.tight_layout()
+        suffix = f"id_{args.id_scale}_step_{args.T_test}_perc_{args.step_percent}_weight_{args.sample_condition_weight}"
         plt.savefig(
-            f"outputs_smiling/comparison_{filename}_id_{args.id_scale}_step_{args.T_test}_perc_{args.step_percent}_weight_{args.sample_condition_weight}.png",
+            f"outputs_smiling/comparison_{filename}_{suffix}.png",
             dpi=200,
             bbox_inches="tight",
         )  # saves the whole figure
         # plt.show()
-        cv2.imwrite(
-            f"outputs_smiling/{filename}_edit_id_{args.id_scale}_step_{args.T_test}_perc_{args.step_percent}_weight_{args.sample_condition_weight}.jpg",
-            out,
-        )
+        cv2.imwrite(f"outputs_smiling/{filename}_edit_{suffix}.jpg", out)
 
     elif args.mode == "video":
         make_progressive_video(

@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from models.diffusion import DiffusionModel, prepare_noise_schedule
 
 DEVICE = "cpu"
@@ -36,14 +37,20 @@ def batch():
 # prepare_noise_schedule
 # ---------------------------------------------------------------------------
 
+
 class TestNoiseSchedule:
     @pytest.mark.parametrize("schedule", ["linear", "cosine"])
     def test_output_shapes(self, schedule):
         T = 50
         sched = prepare_noise_schedule(T, schedule)
-        for key in ("betas", "alphas", "alphas_cumprod",
-                    "sqrt_alphas_cumprod", "sqrt_one_minus_alphas_cumprod",
-                    "posterior_variance"):
+        for key in (
+            "betas",
+            "alphas",
+            "alphas_cumprod",
+            "sqrt_alphas_cumprod",
+            "sqrt_one_minus_alphas_cumprod",
+            "posterior_variance",
+        ):
             assert sched[key].shape == (T,), f"{key} has wrong shape for {schedule}"
 
     @pytest.mark.parametrize("schedule", ["linear", "cosine"])
@@ -79,6 +86,7 @@ class TestNoiseSchedule:
 # DiffusionModel — forward diffusion (q_sample)
 # ---------------------------------------------------------------------------
 
+
 class TestQSample:
     def test_output_shape(self, model, batch):
         t = torch.randint(0, 10, (2,))
@@ -105,6 +113,7 @@ class TestQSample:
 # ---------------------------------------------------------------------------
 # DiffusionModel — forward pass
 # ---------------------------------------------------------------------------
+
 
 class TestForward:
     def test_output_shapes(self, model, batch):
@@ -140,6 +149,7 @@ class TestForward:
 # DiffusionModel — valid_input_combination
 # ---------------------------------------------------------------------------
 
+
 class TestInputCombination:
     def test_uncond_model_accepts_no_conditioning(self, model):
         assert model.valid_input_combination(None) is True
@@ -157,6 +167,7 @@ class TestInputCombination:
 # ---------------------------------------------------------------------------
 # DiffusionModel — _dynamic_threshold
 # ---------------------------------------------------------------------------
+
 
 class TestDynamicThreshold:
     def test_inf_threshold_is_passthrough(self, model):
@@ -178,11 +189,17 @@ class TestDynamicThreshold:
 # DiffusionModel — schedule buffers
 # ---------------------------------------------------------------------------
 
+
 class TestScheduleBuffers:
     def test_train_buffers_registered(self, model):
-        for key in ("betas", "alphas", "alphas_cumprod",
-                    "sqrt_alphas_cumprod", "sqrt_one_minus_alphas_cumprod",
-                    "posterior_variance"):
+        for key in (
+            "betas",
+            "alphas",
+            "alphas_cumprod",
+            "sqrt_alphas_cumprod",
+            "sqrt_one_minus_alphas_cumprod",
+            "posterior_variance",
+        ):
             assert hasattr(model, f"train_{key}"), f"Missing buffer: train_{key}"
 
     def test_test_buffers_registered(self, model):
@@ -193,6 +210,7 @@ class TestScheduleBuffers:
 # ---------------------------------------------------------------------------
 # DiffusionModel — sampling
 # ---------------------------------------------------------------------------
+
 
 class TestSampling:
     def test_ddpm_output_shape(self, model):

@@ -15,16 +15,12 @@ class TextModel(nn.Module):
     ):
         super().__init__()
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
-        self.text_model = CLIPTextModelWithProjection.from_pretrained(model_id).to(
-            device
-        )
+        self.text_model = CLIPTextModelWithProjection.from_pretrained(model_id).to(device)
         self.dim = self.text_model.config.projection_dim
         self.device = device
 
     def forward(self, texts: List[str]) -> torch.Tensor:
-        text_inputs = self.tokenizer(texts, padding=True, return_tensors="pt").to(
-            self.device
-        )
+        text_inputs = self.tokenizer(texts, padding=True, return_tensors="pt").to(self.device)
         outputs = self.text_model(**text_inputs)
 
         return outputs.text_embeds

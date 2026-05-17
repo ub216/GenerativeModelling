@@ -1,17 +1,16 @@
 import pytest
 import torch
-import torch.nn as nn
 
 from helpers.factory import get_loss_function, get_model, get_optimizer_manager
 from helpers.optimizer_manager import OptimizerManager
-from losses.vae import VAELoss
+from losses.gan_hinge_loss import GANHingeLoss
 from losses.pair_mse import PairMSELoss
 from losses.pair_smooth import PairSmoothLoss
-from losses.gan_hinge_loss import GANHingeLoss
+from losses.vae import VAELoss
 from models.diffusion import DiffusionModel
+from models.ema import EMAModel
 from models.flow import FlowModel
 from models.vae import VAE
-from models.ema import EMAModel
 
 # Minimal params that keep models cheap on CPU
 _DIFFUSION_PARAMS = dict(
@@ -38,6 +37,7 @@ _IMG_SIZE_3CH = (8, 8, 3)
 # get_loss_function
 # ---------------------------------------------------------------------------
 
+
 class TestGetLossFunction:
     def test_vae_returns_vae_loss(self):
         loss = get_loss_function({"type": "vae", "params": {}})
@@ -63,6 +63,7 @@ class TestGetLossFunction:
 # ---------------------------------------------------------------------------
 # get_model
 # ---------------------------------------------------------------------------
+
 
 class TestGetModel:
     def test_diffusion_returns_diffusion_model(self):
@@ -113,6 +114,7 @@ class TestGetModel:
 # ---------------------------------------------------------------------------
 # get_optimizer_manager
 # ---------------------------------------------------------------------------
+
 
 class TestGetOptimizerManager:
     def test_single_optimizer_all_key(self):

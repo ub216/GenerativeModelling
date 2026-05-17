@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -17,10 +17,7 @@ class PairMSELoss(nn.Module):
         self.reduction = reduction
 
     def forward(
-        self,
-        outputs: Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]],
-        *args,
-        **kwargs
+        self, outputs: Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]], *args, **kwargs
     ) -> torch.Tensor:
         """
         Computes the Pair Mean Squared Error Loss with optional weighting.

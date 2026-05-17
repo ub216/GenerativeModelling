@@ -1,5 +1,4 @@
-import math
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 import torchvision.transforms as T
@@ -36,9 +35,7 @@ class LatentDiffusionModel(BaseModel):
         self.device = device
 
         # load the Pre-trained VAE
-        self.vae = AutoencoderKL.from_pretrained(
-            vae_model_name, local_files_only=True
-        ).to(device)
+        self.vae = AutoencoderKL.from_pretrained(vae_model_name, local_files_only=True).to(device)
         self.renormalise = renormalise
 
         # Freeze VAE - we only train the Diffusion backbone
@@ -48,14 +45,10 @@ class LatentDiffusionModel(BaseModel):
 
         if compile_vae:
             try:
-                self.vae.encoder = torch.compile(
-                    self.vae.encoder, mode="reduce-overhead"
-                )
+                self.vae.encoder = torch.compile(self.vae.encoder, mode="reduce-overhead")
                 logger.info("VAE Encoder compiled successfully using torch.compile")
             except Exception as e:
-                logger.warning(
-                    f"Failed to compile VAE: {e}. Falling back to eager mode."
-                )
+                logger.warning(f"Failed to compile VAE: {e}. Falling back to eager mode.")
 
         # The VAE scaling factor is crucial for training stability
         self.scaling_factor = self.vae.config.scaling_factor
@@ -124,9 +117,7 @@ class LatentDiffusionModel(BaseModel):
             latents = self.encode(x0, use_sample=use_sample)
 
         # Run the standard diffusion training logic on the latents
-        return self.model(
-            latents, time_steps=time_steps, noise=noise, conditioning=conditioning
-        )
+        return self.model(latents, time_steps=time_steps, noise=noise, conditioning=conditioning)
 
     @property
     def train_alphas_cumprod(self):
@@ -177,9 +168,7 @@ class LatentDiffusionModel(BaseModel):
             clamp_output=False,
             **kwargs,
         )
-        logger.info(
-            f"Generated latents absolute distribution: min {latents.abs().min()}, max {latents.abs().max()}"
-        )
+        logger.info(f"Generated latents absolute distribution: min {latents.abs().min()}, max {latents.abs().max()}")
 
         # decode Latents to Pixels
         # We must process this in batches to avoid OOM on the VAE decoder
@@ -229,9 +218,7 @@ def test_vae_reconstruction(
         raw_img = Image.open(img_path).convert("RGB")
     except FileNotFoundError:
         print(f"Image {img_path} not found, using random noise for test.")
-        raw_img = Image.fromarray(
-            (torch.rand(img_size, img_size, 3).numpy() * 255).astype("uint8")
-        )
+        raw_img = Image.fromarray((torch.rand(img_size, img_size, 3).numpy() * 255).astype("uint8"))
 
     img_tensor = transform(raw_img).unsqueeze(0).to(device)
     img_tensor = img_tensor * 2.0 - 1.0  # Map to [-1, 1] as expected by VAE

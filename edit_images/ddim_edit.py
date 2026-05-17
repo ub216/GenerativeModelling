@@ -2,14 +2,10 @@ from typing import Callable, List, Optional, Tuple
 
 import torch
 
-import models
-
 
 def make_ddim_time_pairs(train_T: int, T_test: int, device) -> List[Tuple[int, int]]:
     # Create a schedule from 0 up to T-1
-    times = torch.linspace(
-        0, train_T - 1, T_test + 1, dtype=torch.long, device=device
-    ).tolist()
+    times = torch.linspace(0, train_T - 1, T_test + 1, dtype=torch.long, device=device).tolist()
 
     # Inversion: (0 -> 20), (20 -> 40) ... (960 -> 980)
     # Moving from Clean (Alpha ~1) to Noisy (Alpha ~0)
@@ -78,9 +74,7 @@ def ddim_step(
 
 
 @torch.no_grad()
-def sdedit_add_noise(
-    x0: torch.Tensor, t_idx: int, model: any, device: str
-) -> torch.Tensor:
+def sdedit_add_noise(x0: torch.Tensor, t_idx: int, model: any, device: str) -> torch.Tensor:
     """
     The function adds Gaussian noise to the clean image x0 to reach the latent state x_t
     corresponding to the provided timestep index.
@@ -119,9 +113,7 @@ def ddim_invert(
         a_t = model.train_alphas_cumprod[t_curr]
         a_next = model.train_alphas_cumprod[t_next]
 
-        x_t = ddim_step(
-            x_t, eps, a_t, a_next, dynamic_threshold_fn=None, clamp_pred=clamp_pred
-        )
+        x_t = ddim_step(x_t, eps, a_t, a_next, dynamic_threshold_fn=None, clamp_pred=clamp_pred)
     return x_t
 
 
@@ -134,9 +126,7 @@ def ddim_edit_from_noise(
     dec_pairs: List[Tuple[int, int]],
     device: str,
     cfg_schedule: Callable[[int, int], float],  # (step_idx, num_steps) -> scale
-    guidance_fn: Optional[
-        Callable[[torch.Tensor, torch.Tensor, int, int], torch.Tensor]
-    ] = None,
+    guidance_fn: Optional[Callable[[torch.Tensor, torch.Tensor, int, int], torch.Tensor]] = None,
     clamp_pred: float = 1.0,
 ) -> torch.Tensor:
     """
@@ -156,11 +146,7 @@ def ddim_edit_from_noise(
             eps = predict_eps_cfg(model, x_t, t_batch, conditioning, cfg_scale=cfg)
 
         a_t = model.train_alphas_cumprod[t_curr]
-        a_next = (
-            model.train_alphas_cumprod[t_next]
-            if t_next >= 0
-            else torch.tensor(1.0, device=device)
-        )
+        a_next = model.train_alphas_cumprod[t_next] if t_next >= 0 else torch.tensor(1.0, device=device)
 
         # guidance Step
         # The code calculates correction gradients if a guidance function is provided.
@@ -182,7 +168,8 @@ def ddim_edit_from_noise(
                 sigma_t = torch.sqrt(1.0 - a_t)
                 eps = eps + sigma_t * grad
                 print(
-                    f"Step {i+1}/{num_steps}: Applied guidance with loss {loss.item():.4f}, grad norm {grad.norm().item():.4f}, sigma_t {sigma_t.item():.4f}"
+                    f"Step {i+1}/{num_steps}: Applied guidance with loss {loss.item():.4f}, "
+                    f"grad norm {grad.norm().item():.4f}, sigma_t {sigma_t.item():.4f}"
                 )
 
         # step

@@ -1,4 +1,4 @@
-from typing import Dict, Tuple
+from typing import Tuple
 
 import torch
 import torch.nn as nn
@@ -24,18 +24,12 @@ class VAELoss(nn.Module):
         self.reduction = reduction
 
     def forward(
-        self,
-        outputs: Tuple[torch.Tensor, torch.Tensor, torch.Tensor],
-        inputs: torch.Tensor,
-        *args,
-        **kwargs
+        self, outputs: Tuple[torch.Tensor, torch.Tensor, torch.Tensor], inputs: torch.Tensor, *args, **kwargs
     ) -> torch.Tensor:
         """
         Computes the VAE loss = KLdivergence + L2 reconstructing error
         """
-        assert (
-            isinstance(outputs, tuple) and len(outputs) == 3
-        ), "Outputs must be a tuple of (output, z_logvar, z_mean)"
+        assert isinstance(outputs, tuple) and len(outputs) == 3, "Outputs must be a tuple of (output, z_logvar, z_mean)"
 
         output, z_mean, z_logvar = outputs
 

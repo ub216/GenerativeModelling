@@ -1,4 +1,4 @@
-from losses.gan_hinge_loss import GANHingeLoss
-from losses.pair_mse import PairMSELoss
-from losses.pair_smooth import PairSmoothLoss
-from losses.vae import VAELoss
+from losses.gan_hinge_loss import GANHingeLoss  # noqa: F401
+from losses.pair_mse import PairMSELoss  # noqa: F401
+from losses.pair_smooth import PairSmoothLoss  # noqa: F401
+from losses.vae import VAELoss  # noqa: F401

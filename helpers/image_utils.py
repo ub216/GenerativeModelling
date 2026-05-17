@@ -44,16 +44,12 @@ def get_transforms(
         interpolation=InterpolationMode.BILINEAR,
         fill=None,
     )
-    color_jitter = transforms.ColorJitter(
-        brightness=0.15, contrast=0.15, saturation=0.1
-    )
+    color_jitter = transforms.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.1)
     gaussian_blur = transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 1.0))
     flip = transforms.RandomHorizontalFlip(p=0.5)
 
     geometric_transform_list = [rotate, translate, scale, shear]
-    geometric_transform_list = [
-        transforms.RandomApply([t], p=0.5) for t in geometric_transform_list
-    ]
+    geometric_transform_list = [transforms.RandomApply([t], p=0.5) for t in geometric_transform_list]
     geometric_transform = transforms.Compose(
         [
             transforms.Resize(image_size),

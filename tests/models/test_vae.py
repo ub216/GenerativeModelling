@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from models.vae import VAE
 
 _KWARGS = dict(
@@ -25,6 +26,7 @@ def batch():
 # ---------------------------------------------------------------------------
 # VAE.forward
 # ---------------------------------------------------------------------------
+
 
 class TestVAEForward:
     def test_returns_three_element_tuple(self, model, batch):
@@ -54,6 +56,7 @@ class TestVAEForward:
 # VAE.random_sample — reparameterisation
 # ---------------------------------------------------------------------------
 
+
 class TestRandomSample:
     def test_output_shape(self, model):
         z_mean = torch.zeros(2, _KWARGS["latent_dim"])
@@ -80,6 +83,7 @@ class TestRandomSample:
 # ---------------------------------------------------------------------------
 # VAE.sample — prior sampling
 # ---------------------------------------------------------------------------
+
 
 class TestVAESample:
     def test_output_shape(self, model):

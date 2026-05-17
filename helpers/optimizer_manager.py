@@ -21,11 +21,10 @@ class OptimizerManager:
         self.accumulate_steps = accumulate_steps
         self._step_count = 0
 
-        self.scalers = {
-            key: GradScaler() if use_scaler else None for key in optimizers.keys()
-        }
+        self.scalers = {key: GradScaler() if use_scaler else None for key in optimizers.keys()}
         logger.info(
-            f"Initialized OptimizerManager with optimizers: {list(optimizers.keys())} and use_scaler={use_scaler}, accumulate_steps={accumulate_steps}, max_grad_norm={max_grad_norm}"
+            f"Initialized OptimizerManager with optimizers: {list(optimizers.keys())} "
+            f"and use_scaler={use_scaler}, accumulate_steps={accumulate_steps}, max_grad_norm={max_grad_norm}"
         )
 
     def _get_params_for_key(self, key: str):

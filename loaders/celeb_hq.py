@@ -33,11 +33,11 @@ class CelebAHQDataset(Dataset):
 
         # load the Mapping File
         # Expected cols: idx, orig_idx, orig_file
-        mapping_df = pd.read_csv(self.mapping_file, sep="\s+")
+        mapping_df = pd.read_csv(self.mapping_file, sep=r"\s+")
 
         # load the Original Attributes
         # Line 1: Total count, Line 2: Attr names. Use sep='\s+' for varying whitespace.
-        attr_df = pd.read_csv(self.attr_file, sep="\s+", skiprows=1)
+        attr_df = pd.read_csv(self.attr_file, sep=r"\s+", skiprows=1)
         self.all_labels = list(attr_df.columns)
         self.all_labels = [label.strip().lower() for label in self.all_labels]
 
@@ -99,9 +99,7 @@ class CelebAHQDataset(Dataset):
         # Get Attributes for this specific HQ index
         attr_row = self.attributes.iloc[index].values
         # CelebA uses -1 and 1; we convert to float tensor
-        selected_attr_values = torch.tensor(
-            attr_row[self.selected_indices].astype(float)
-        )
+        selected_attr_values = torch.tensor(attr_row[self.selected_indices].astype(float))
 
         if self.transform:
             img = self.transform(img)

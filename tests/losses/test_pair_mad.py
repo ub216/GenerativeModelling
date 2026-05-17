@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from losses.pair_mad import PairMADLoss
 
 
@@ -48,6 +49,7 @@ class TestPairMADLoss:
     def test_l1_less_than_mse_for_large_errors(self):
         """For large errors, L1 < MSE (no quadratic blow-up)."""
         from losses.pair_mse import PairMSELoss
+
         fn_mad = PairMADLoss(reduction="mean")
         fn_mse = PairMSELoss(reduction="mean")
         x = torch.zeros(2, 1, 4, 4)

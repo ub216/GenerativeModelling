@@ -49,9 +49,7 @@ class DiffusionModel(BaseModel):
 
         self.in_channels = in_channels
         self.timesteps = timesteps
-        self.test_timesteps = (
-            test_timesteps if test_timesteps is not None else timesteps
-        )
+        self.test_timesteps = test_timesteps if test_timesteps is not None else timesteps
         self.text_emb_dim = text_emb_dim
         self.drop_condition_ratio = drop_condition_ratio
         self.sample_condition_weight = sample_condition_weight
@@ -60,24 +58,18 @@ class DiffusionModel(BaseModel):
         self.use_snr_weighting = use_snr_weighting
 
         # Register Training Schedule as Buffers (Multi-GPU compatibility)
-        train_sched = prepare_noise_schedule(
-            self.timesteps, schedule_type=schedule_type
-        )
+        train_sched = prepare_noise_schedule(self.timesteps, schedule_type=schedule_type)
         for k, v in train_sched.items():
             self.register_buffer(f"train_{k}", v)
 
         # Test schedule (can be different number of timesteps)
         if self.test_timesteps != self.timesteps:
-            test_sched = prepare_noise_schedule(
-                self.test_timesteps, schedule_type=schedule_type
-            )
+            test_sched = prepare_noise_schedule(self.test_timesteps, schedule_type=schedule_type)
             for k, v in test_sched.items():
                 self.register_buffer(f"test_{k}", v, persistent=False)
         else:
             for k in train_sched.keys():
-                self.register_buffer(
-                    f"test_{k}", getattr(self, f"train_{k}"), persistent=False
-                )
+                self.register_buffer(f"test_{k}", getattr(self, f"train_{k}"), persistent=False)
 
         if self.has_conditional_generation:
             logger.info("Created a conditioned diffusion model")
@@ -103,9 +95,7 @@ class DiffusionModel(BaseModel):
             x0 = x0 * 2.0 - 1.0  # Scale [0, 1] -> [-1, 1]
 
         if time_steps is None:
-            time_steps = torch.randint(
-                0, self.timesteps, (x0.shape[0],), device=x0.device, dtype=torch.long
-            )
+            time_steps = torch.randint(0, self.timesteps, (x0.shape[0],), device=x0.device, dtype=torch.long)
 
         if noise is None:
             noise = torch.randn_like(x0)
@@ -120,9 +110,7 @@ class DiffusionModel(BaseModel):
         if self.use_snr_weighting:
             alphas_cumprod = self.train_alphas_cumprod[time_steps]
             snr = alphas_cumprod / (1 - alphas_cumprod).clamp(min=1e-7)
-            mse_loss_weights = torch.stack(
-                [snr, torch.ones_like(snr) * 5.0], dim=1
-            ).min(dim=1)[0]
+            mse_loss_weights = torch.stack([snr, torch.ones_like(snr) * 5.0], dim=1).min(dim=1)[0]
             return predicted_noise, noise, mse_loss_weights
         return predicted_noise, noise
 
@@ -149,9 +137,7 @@ class DiffusionModel(BaseModel):
         If use_ddim=True, it allows any test_timesteps <= self.timesteps.
         """
         self.unet.eval()
-        T_test = (
-            self.test_timesteps if self.test_timesteps is not None else self.timesteps
-        )
+        T_test = self.test_timesteps if self.test_timesteps is not None else self.timesteps
 
         # Ensure conditioning is set up
         if conditioning is None and self.has_conditional_generation:
@@ -204,26 +190,16 @@ class DiffusionModel(BaseModel):
         threshold_coeff: float,
     ):
         # Create the sparse indices for the skip-steps
-        times = torch.linspace(
-            -1, self.timesteps - 1, T_test + 1, dtype=torch.long, device=device
-        )
+        times = torch.linspace(-1, self.timesteps - 1, T_test + 1, dtype=torch.long, device=device)
         times = list(reversed(times.tolist()))
-        time_pairs = list(
-            zip(times[:-1], times[1:])
-        )  # e.g., [(999, 949), (949, 899)...]
+        time_pairs = list(zip(times[:-1], times[1:]))  # e.g., [(999, 949), (949, 899)...]
 
         samples = []
         for idx in range(math.ceil(num_samples / batch_size)):
             cur_bs = min(batch_size, num_samples - len(samples))
-            x_t = torch.randn(
-                cur_bs, self.in_channels, image_size[0], image_size[1], device=device
-            )
+            x_t = torch.randn(cur_bs, self.in_channels, image_size[0], image_size[1], device=device)
 
-            c_batch = (
-                conditioning[idx * batch_size : idx * batch_size + cur_bs]
-                if conditioning
-                else None
-            )
+            c_batch = conditioning[idx * batch_size : idx * batch_size + cur_bs] if conditioning else None
             u_batch = [""] * cur_bs if self.has_conditional_generation else None
 
             for t_curr, t_next in time_pairs:
@@ -237,24 +213,16 @@ class DiffusionModel(BaseModel):
                         conditioning=c_batch + u_batch,
                     )
                     e_cond, e_uncond = eps_all.chunk(2)
-                    eps_theta = e_uncond + self.sample_condition_weight * (
-                        e_cond - e_uncond
-                    )
+                    eps_theta = e_uncond + self.sample_condition_weight * (e_cond - e_uncond)
                 else:
                     eps_theta, _ = self.unet(x_t, t_batch)
 
                 # DDIM Jump Math
                 alpha_bar_curr = self.train_alphas_cumprod[t_curr]
-                alpha_bar_next = (
-                    self.train_alphas_cumprod[t_next]
-                    if t_next >= 0
-                    else torch.tensor(1.0).to(device)
-                )
+                alpha_bar_next = self.train_alphas_cumprod[t_next] if t_next >= 0 else torch.tensor(1.0).to(device)
 
                 # estimate x0
-                pred_x0 = (
-                    x_t - torch.sqrt(1 - alpha_bar_curr) * eps_theta
-                ) / torch.sqrt(alpha_bar_curr)
+                pred_x0 = (x_t - torch.sqrt(1 - alpha_bar_curr) * eps_theta) / torch.sqrt(alpha_bar_curr)
 
                 # dynamic thresholding to keep pixel values in check
                 if dynamic_threshold:
@@ -283,15 +251,9 @@ class DiffusionModel(BaseModel):
         samples = []
         for idx in range(math.ceil(num_samples / batch_size)):
             cur_bs = min(batch_size, num_samples - len(samples))
-            x_t = torch.randn(
-                cur_bs, self.in_channels, image_size[0], image_size[1], device=device
-            )
+            x_t = torch.randn(cur_bs, self.in_channels, image_size[0], image_size[1], device=device)
 
-            c_batch = (
-                conditioning[idx * batch_size : idx * batch_size + cur_bs]
-                if conditioning
-                else None
-            )
+            c_batch = conditioning[idx * batch_size : idx * batch_size + cur_bs] if conditioning else None
             u_batch = [""] * cur_bs if self.has_conditional_generation else None
 
             for t in reversed(range(self.test_timesteps)):
@@ -304,9 +266,7 @@ class DiffusionModel(BaseModel):
                         conditioning=c_batch + u_batch,
                     )
                     e_cond, e_uncond = eps_all.chunk(2)
-                    eps_theta = e_uncond + self.sample_condition_weight * (
-                        e_cond - e_uncond
-                    )
+                    eps_theta = e_uncond + self.sample_condition_weight * (e_cond - e_uncond)
                 else:
                     eps_theta, _ = self.unet(x_t, t_batch)
 
@@ -322,9 +282,7 @@ class DiffusionModel(BaseModel):
                     sqrt_one_minus_alpha_cum_t = torch.sqrt(1 - alpha_cum_t)
 
                     # estimate x0 from the noise prediction
-                    pred_x0 = (
-                        x_t - sqrt_one_minus_alpha_cum_t * eps_theta
-                    ) / sqrt_alpha_cum_t
+                    pred_x0 = (x_t - sqrt_one_minus_alpha_cum_t * eps_theta) / sqrt_alpha_cum_t
 
                 # apply thresholding to keep values in check
                 if dynamic_threshold:
@@ -335,11 +293,7 @@ class DiffusionModel(BaseModel):
                 # use the thresholded x0 to find the mean for the next step (x_{t-1})
                 alpha_t = self.test_alphas[t]
                 beta_t = self.test_betas[t]
-                alpha_cum_prev = (
-                    self.test_alphas_cumprod[t - 1]
-                    if t > 0
-                    else torch.tensor(1.0).to(device)
-                )
+                alpha_cum_prev = self.test_alphas_cumprod[t - 1] if t > 0 else torch.tensor(1.0).to(device)
                 # At t=0, (1 - alpha_cum_t) becomes very small (~4e-5).
                 # We clamp the denominator to prevent the final latent from blowing up.
                 denom = (1 - alpha_cum_t).clamp(min=1e-7)
@@ -354,9 +308,7 @@ class DiffusionModel(BaseModel):
             samples.append(x_t)
         return torch.cat(samples, dim=0)[:num_samples]
 
-    def _dynamic_threshold(
-        self, x0: torch.Tensor, p: float = 0.995, c: float = 1.0
-    ) -> torch.Tensor:
+    def _dynamic_threshold(self, x0: torch.Tensor, p: float = 0.995, c: float = 1.0) -> torch.Tensor:
         """
         x0: (B, C, H, W) - The predicted clean image
         p: Percentile (usually 0.995)
@@ -395,9 +347,7 @@ class DiffusionModel(BaseModel):
         returns: x_t = sqrt_alphas_cumprod[t] * x0 + sqrt(1 - alphas_cumprod[t]) * noise
         """
         sqrt_a = getattr(self, f"{mode}_sqrt_alphas_cumprod")[t].view(-1, 1, 1, 1)
-        sqrt_1_a = getattr(self, f"{mode}_sqrt_one_minus_alphas_cumprod")[t].view(
-            -1, 1, 1, 1
-        )
+        sqrt_1_a = getattr(self, f"{mode}_sqrt_one_minus_alphas_cumprod")[t].view(-1, 1, 1, 1)
         return sqrt_a * x0 + sqrt_1_a * noise
 
     def valid_input_combination(self, conditioning: Optional[List[str]]) -> bool:
@@ -410,9 +360,7 @@ class DiffusionModel(BaseModel):
 # -------------------------
 # Noise schedule helpers
 # -------------------------
-def prepare_noise_schedule(
-    num_timesteps: int, schedule_type: str = "cosine"
-) -> Dict[str, torch.Tensor]:
+def prepare_noise_schedule(num_timesteps: int, schedule_type: str = "cosine") -> Dict[str, torch.Tensor]:
     # Use float64 for schedule generation to avoid precision drift
     if schedule_type == "linear":
         betas = torch.linspace(1e-4, 0.02, num_timesteps, dtype=torch.float64)
@@ -421,9 +369,7 @@ def prepare_noise_schedule(
         s = 0.02
         x = torch.linspace(0, num_timesteps, num_timesteps + 1, dtype=torch.float64)
         # Standard Improved DDPM cosine curve
-        alphas_cumprod = (
-            torch.cos(((x / num_timesteps) + s) / (1 + s) * math.pi * 0.5) ** 2
-        )
+        alphas_cumprod = torch.cos(((x / num_timesteps) + s) / (1 + s) * math.pi * 0.5) ** 2
         alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
         # Calculate betas from the curve
         betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
@@ -434,9 +380,7 @@ def prepare_noise_schedule(
         raise ValueError(f"Unknown schedule type: {schedule_type}")
 
     alphas = 1.0 - betas
-    alphas_cumprod_prev = torch.cat(
-        [torch.ones(1, dtype=torch.float64), alphas_cumprod[:-1]]
-    )
+    alphas_cumprod_prev = torch.cat([torch.ones(1, dtype=torch.float64), alphas_cumprod[:-1]])
 
     # --- STABILITY FIX FOR LATENT DIFFUSION ---
     # The denominator (1 - alphas_cumprod) approaches 0 as t approaches 0 (alphas_cumprod -> 1).
@@ -445,9 +389,8 @@ def prepare_noise_schedule(
     denom = (1.0 - alphas_cumprod).clamp(min=1e-12)
     posterior_variance = betas * (1.0 - alphas_cumprod_prev).clamp(min=0) / denom
 
-    logger.info(
-        f"SNR range: {((alphas_cumprod / (1 - alphas_cumprod)).sqrt()).min()} to {((alphas_cumprod / (1 - alphas_cumprod)).sqrt()).max()}"
-    )
+    snr = (alphas_cumprod / (1 - alphas_cumprod)).sqrt()
+    logger.info(f"SNR range: {snr.min()} to {snr.max()}")
 
     # Cast back to float32 only at the end
     return {

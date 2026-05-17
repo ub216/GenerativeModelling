@@ -1,7 +1,6 @@
 from typing import Optional
 
 import torch
-from loguru import logger
 from torch import nn
 
 
@@ -25,12 +24,8 @@ class ResidualConv(nn.Module):
     ):
         super().__init__()
         # standard Convolutions
-        self.conv1 = nn.Conv2d(
-            in_channels, out_channels, 3, stride=stride, padding=1, bias=bias
-        )
-        self.conv2 = nn.Conv2d(
-            out_channels, out_channels, 3, stride=1, padding=1, bias=bias
-        )
+        self.conv1 = nn.Conv2d(in_channels, out_channels, 3, stride=stride, padding=1, bias=bias)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, 3, stride=1, padding=1, bias=bias)
 
         # for GAN stability
         if spectral_norm:
@@ -57,9 +52,7 @@ class ResidualConv(nn.Module):
         # 4. Skip connection
         self.skip = nn.Identity()
         if in_channels != out_channels or stride != 1:
-            self.skip = nn.Conv2d(
-                in_channels, out_channels, 1, stride=stride, bias=bias
-            )
+            self.skip = nn.Conv2d(in_channels, out_channels, 1, stride=stride, bias=bias)
 
         self.intialise_zero()
 
@@ -135,22 +128,12 @@ class ResidualDeconv(nn.Module):
         )
         self.act = activation
         self.dropout = nn.Dropout2d(dropout)
-        self.deconv2 = nn.ConvTranspose2d(
-            out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=bias
-        )
+        self.deconv2 = nn.ConvTranspose2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=bias)
 
         self.norm1 = self.norm2 = None
         if norm:
-            self.norm1 = (
-                nn.GroupNorm(8, out_channels)
-                if out_channels >= 8
-                else nn.BatchNorm2d(out_channels)
-            )
-            self.norm2 = (
-                nn.GroupNorm(8, out_channels)
-                if out_channels >= 8
-                else nn.BatchNorm2d(out_channels)
-            )
+            self.norm1 = nn.GroupNorm(8, out_channels) if out_channels >= 8 else nn.BatchNorm2d(out_channels)
+            self.norm2 = nn.GroupNorm(8, out_channels) if out_channels >= 8 else nn.BatchNorm2d(out_channels)
 
         # skip connection
         self.skip = nn.ConvTranspose2d(

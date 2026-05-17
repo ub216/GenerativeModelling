@@ -4,8 +4,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import helpers.custom_types as custom_types
-
 
 class GANHingeLoss(nn.Module):
     def __init__(
@@ -28,14 +26,11 @@ class GANHingeLoss(nn.Module):
         returns: generator loss, discriminator loss
         """
         assert (
-            len(outputs) == 3
-            and outputs[0].shape == outputs[1].shape == outputs[2].shape
+            len(outputs) == 3 and outputs[0].shape == outputs[1].shape == outputs[2].shape
         ), "Outputs and inputs must have the same shape"
         generator_score_gen, generator_score_dis, real_score = outputs
 
-        discriminator_loss = torch.mean(F.relu(1.0 - real_score)) + torch.mean(
-            F.relu(1.0 - generator_score_dis)
-        )
+        discriminator_loss = torch.mean(F.relu(1.0 - real_score)) + torch.mean(F.relu(1.0 - generator_score_dis))
         generator_loss = -torch.mean(generator_score_gen)
 
         return {"generator": generator_loss, "discriminator": discriminator_loss}

@@ -20,9 +20,7 @@ class BaseModel(ABC, nn.Module):
         self.has_conditional_generation = False
 
     @abstractmethod
-    def sample(
-        self, num_samples: int, device: custom_types.DeviceType, *args, **kwargs
-    ) -> torch.Tensor:
+    def sample(self, num_samples: int, device: custom_types.DeviceType, *args, **kwargs) -> torch.Tensor:
         """
         Generate samples from the model.
         Args:
@@ -52,7 +50,5 @@ class BaseModel(ABC, nn.Module):
             DataLoader yielding generated samples.
         """
         dataset = GeneratedDataset(self, num_samples, device, image_size, batch_size)
-        dataloader = DataLoader(
-            dataset, batch_size=batch_size, shuffle=False, num_workers=0
-        )
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
         return dataloader

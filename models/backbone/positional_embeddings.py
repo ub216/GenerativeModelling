@@ -4,9 +4,7 @@ import numpy as np
 import torch
 
 
-def get_2d_sincos_pos_embed(
-    embed_dim: int, grid_size: int | Tuple[int, int], cls_token: bool = False
-) -> torch.Tensor:
+def get_2d_sincos_pos_embed(embed_dim: int, grid_size: int | Tuple[int, int], cls_token: bool = False) -> torch.Tensor:
     """
     grid_size: int of the grid height and width
     return:
@@ -27,9 +25,7 @@ def get_2d_sincos_pos_embed(
     return torch.from_numpy(pos_embed).float()
 
 
-def get_2d_sincos_pos_embed_from_grid(
-    embed_dim: int, grid: Tuple[int, int]
-) -> np.ndarray:
+def get_2d_sincos_pos_embed_from_grid(embed_dim: int, grid: Tuple[int, int]) -> np.ndarray:
     assert embed_dim % 2 == 0
 
     # use half of dimensions to encode grid_h

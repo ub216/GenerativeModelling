@@ -40,9 +40,7 @@ class GAN(BaseModel):
         # ---------- Generator ----------
         # # compute flattened size for convs
         generator_reduced_size = image_size // (2 ** len(generator_feature_dims))
-        conv_out_dim = (
-            generator_feature_dims[0] * generator_reduced_size * generator_reduced_size
-        )
+        conv_out_dim = generator_feature_dims[0] * generator_reduced_size * generator_reduced_size
 
         gen_blocks = [
             nn.Linear(latent_dim, hidden_dim),
@@ -99,12 +97,8 @@ class GAN(BaseModel):
             prev_ch = ch
         dis_blocks.append(nn.Flatten())
 
-        discriminator_reduced_size = image_size // (
-            2 ** len(discriminator_feature_dims)
-        )
-        discriminator_reduced_size = (
-            discriminator_reduced_size * discriminator_reduced_size * prev_ch
-        )
+        discriminator_reduced_size = image_size // (2 ** len(discriminator_feature_dims))
+        discriminator_reduced_size = discriminator_reduced_size * discriminator_reduced_size * prev_ch
 
         # Change the last layer based on required GAN type/loss.
         # For hinge loss Linear O/P is recommended
@@ -124,9 +118,7 @@ class GAN(BaseModel):
 
         return gen_score_gen, gen_score_dis, real_score
 
-    def sample(
-        self, num_samples: int, device: custom_types.DeviceType, *args, **kwargs
-    ):
+    def sample(self, num_samples: int, device: custom_types.DeviceType, *args, **kwargs):
         latent = torch.randn(num_samples, self.latent_dim).to(device)
         gen_sample = self.generator(latent)
         return gen_sample

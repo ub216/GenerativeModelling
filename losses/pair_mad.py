@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -17,10 +17,7 @@ class PairMADLoss(nn.Module):
         self.reduction = reduction
 
     def forward(
-        self,
-        outputs: Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]],
-        *args,
-        **kwargs
+        self, outputs: Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]], *args, **kwargs
     ) -> torch.Tensor:
         """
         Computes the Pair Mean Absolute Deviation Loss with optional weighting.
@@ -33,9 +30,7 @@ class PairMADLoss(nn.Module):
             torch.Tensor: The computed loss value.
         """
 
-        assert (
-            len(outputs) >= 2 and outputs[0].shape == outputs[1].shape
-        ), "Outputs and inputs must have the same shape"
+        assert len(outputs) >= 2 and outputs[0].shape == outputs[1].shape, "Outputs and inputs must have the same shape"
         predicted, target = outputs[0], outputs[1]
 
         # Calculate raw MSE per pixel

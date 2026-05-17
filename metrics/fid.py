@@ -39,9 +39,7 @@ class FIDInception(nn.Module):
         """Accumulate mean and covariance batch by batch from dataloader."""
         feats = []
         with torch.no_grad():
-            total_batches = (
-                self.samples + dataloader.batch_size - 1
-            ) // dataloader.batch_size
+            total_batches = (self.samples + dataloader.batch_size - 1) // dataloader.batch_size
             pbar = tqdm(dataloader, desc=desc, total=total_batches, leave=False)
             num_feats = 0
             for batch in pbar:
@@ -58,9 +56,7 @@ class FIDInception(nn.Module):
         mu, sigma = self.calculate_statistics(feats)
         return mu, sigma
 
-    def calculate_fid(
-        self, mu1: np.ndarray, sigma1: np.ndarray, mu2: np.ndarray, sigma2: np.ndarray
-    ) -> float:
+    def calculate_fid(self, mu1: np.ndarray, sigma1: np.ndarray, mu2: np.ndarray, sigma2: np.ndarray) -> float:
         if isinstance(mu1, np.ndarray):
             diff = mu1 - mu2
             covmean, _ = linalg.sqrtm(sigma1.dot(sigma2), disp=False)
@@ -68,7 +64,7 @@ class FIDInception(nn.Module):
                 covmean = covmean.real
             fid = diff.dot(diff) + np.trace(sigma1 + sigma2 - 2 * covmean)
         else:
-            raise TypeError(f"Incorrect format of mean and covriances to compute fid")
+            raise TypeError("Incorrect format of mean and covriances to compute fid")
         return float(fid)
 
     def forward(
@@ -77,19 +73,11 @@ class FIDInception(nn.Module):
         gen_loader: torch.utils.data.DataLoader,
     ) -> float:
         """Accumulate mean and covariance batch by batch from dataloader."""
-        assert isinstance(
-            real_loader, torch.utils.data.DataLoader
-        ), "real_loader must be a DataLoader"
-        assert isinstance(
-            gen_loader, torch.utils.data.DataLoader
-        ), "gen_loader must be a DataLoader"
+        assert isinstance(real_loader, torch.utils.data.DataLoader), "real_loader must be a DataLoader"
+        assert isinstance(gen_loader, torch.utils.data.DataLoader), "gen_loader must be a DataLoader"
 
-        mu_real, sigma_real = self.get_dataloader_statistics(
-            real_loader, desc="Calculating real data statistics"
-        )
-        mu_gen, sigma_gen = self.get_dataloader_statistics(
-            gen_loader, desc="Calculating generated data statistics"
-        )
+        mu_real, sigma_real = self.get_dataloader_statistics(real_loader, desc="Calculating real data statistics")
+        mu_gen, sigma_gen = self.get_dataloader_statistics(gen_loader, desc="Calculating generated data statistics")
         fid = self.calculate_fid(mu_real, sigma_real, mu_gen, sigma_gen)
         return fid
 
@@ -98,5 +86,5 @@ class FIDInception(nn.Module):
             mu = np.mean(feats, axis=0)
             sigma = np.cov(feats, rowvar=False)
         else:
-            raise TypeError(f"Incorrect format of mean and covriances to compute fid")
+            raise TypeError("Incorrect format of mean and covriances to compute fid")
         return mu, sigma

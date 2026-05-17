@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-import torch
 from facenet_pytorch import MTCNN
 
 
@@ -12,9 +11,7 @@ def _to_bgr_uint8(img_rgb: np.ndarray) -> np.ndarray:
     return cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
 
 
-def estimate_similarity_transform(
-    src_pts: np.ndarray, dst_pts: np.ndarray
-) -> np.ndarray:
+def estimate_similarity_transform(src_pts: np.ndarray, dst_pts: np.ndarray) -> np.ndarray:
     """
     Computes a 2x3 similarity transform (rotation, scale, translation)
     that preserves aspect ratio.
@@ -37,9 +34,7 @@ class FaceAligner:
     ):
         self.image_size = image_size
         self.device = device
-        self.mtcnn = MTCNN(
-            image_size=None, keep_all=True, min_face_size=min_face_size, device=device
-        )
+        self.mtcnn = MTCNN(image_size=None, keep_all=True, min_face_size=min_face_size, device=device)
 
         # original celebA template (178x218)
         if template == "celeb":
@@ -99,9 +94,7 @@ class FaceAligner:
         target_center = np.array([self.image_size / 2, self.image_size / 2])
 
         # Note: scale < 1.0 = Zoom Out (Relaxed), scale > 1.0 = Zoom In (Tight)
-        relaxed_target_lm = (
-            self.target_landmarks - target_center
-        ) * relaxation_scale + target_center
+        relaxed_target_lm = (self.target_landmarks - target_center) * relaxation_scale + target_center
 
         # compute similarity transform
         # map original landmarks to the relaxed target
@@ -119,9 +112,7 @@ class FaceAligner:
             debug_img = aligned.copy()
             for pt in relaxed_target_lm:
                 cv2.circle(debug_img, (int(pt[0]), int(pt[1])), 2, (255, 0, 0), -1)
-            cv2.imwrite(
-                "debug_alignment.jpg", cv2.cvtColor(debug_img, cv2.COLOR_RGB2BGR)
-            )
+            cv2.imwrite("debug_alignment.jpg", cv2.cvtColor(debug_img, cv2.COLOR_RGB2BGR))
 
         meta = {"M": M, "orig_size": (img_bgr.shape[1], img_bgr.shape[0])}
         return aligned, meta

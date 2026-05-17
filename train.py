@@ -15,13 +15,7 @@ import helpers.custom_types as custom_types
 import metrics
 import wandb
 from helpers.diffusion_utils import drop_condition
-from helpers.factory import (
-    get_dataset,
-    get_loss_function,
-    get_metrics,
-    get_model,
-    get_optimizer_manager,
-)
+from helpers.factory import get_dataset, get_loss_function, get_metrics, get_model, get_optimizer_manager
 from helpers.optimizer_manager import OptimizerManager
 from helpers.utils import save_eval_results
 
@@ -122,9 +116,7 @@ def eval_sample(
                     break
             conditioning = conditioning[:num_samples]
             conditioning = (
-                drop_condition(conditioning, 0.25)
-                if sum([c == "" for c in conditioning]) == 0
-                else conditioning
+                drop_condition(conditioning, 0.25) if sum([c == "" for c in conditioning]) == 0 else conditioning
             )
             samples = model.sample(
                 num_samples,
@@ -135,9 +127,7 @@ def eval_sample(
             )
         else:
             # unconditional sampling
-            samples = model.sample(
-                num_samples, device, image_size, batch_size=num_samples
-            )
+            samples = model.sample(num_samples, device, image_size, batch_size=num_samples)
 
     # log a few images
     samples_cpu = samples.cpu()
@@ -173,9 +163,7 @@ def train(
     prev_best_score = float("inf")
     for epoch in range(start_epoch, epochs):
         t0 = time.time()
-        epoch_loss = train_one_epoch(
-            model, model_ema, dataloader, optimizer_manager, criterion, device, epoch
-        )
+        epoch_loss = train_one_epoch(model, model_ema, dataloader, optimizer_manager, criterion, device, epoch)
         epoch_time = time.time() - t0
         wandb.log({"epoch_time": epoch_time}, step=(epoch + 1) * len(dataloader))
         wandb.log({"epoch_loss": epoch_loss}, step=(epoch + 1) * len(dataloader))
@@ -206,7 +194,7 @@ def train(
             curr_score = prev_best_score
             for metric in compute_metrics:
                 # FID is computed on unconditioned input only
-                if type(metric) == metrics.FIDInception:
+                if isinstance(metric, metrics.FIDInception):
                     sampler_loader = model.wrap_sampler_to_loader(
                         num_samples=metric.samples,
                         device=device,
@@ -280,9 +268,7 @@ def main(config_path: str = "config.yaml"):
     # Setup model after dataloader to estimate image_size and
     # channel dimension. This is required to initiate models
     # Also initialise EMA model for stable sampling
-    model, model_ema = get_model(
-        cfg["model"], dataloader, ema_decay=cfg["training"].get("ema_decay", 0)
-    )
+    model, model_ema = get_model(cfg["model"], dataloader, ema_decay=cfg["training"].get("ema_decay", 0))
 
     model.to(cfg["training"]["device"])
     model_ema.to(cfg["training"]["device"])

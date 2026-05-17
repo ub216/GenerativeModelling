@@ -1,5 +1,4 @@
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -24,9 +23,7 @@ class FaceVerifier:
         # standardize (Whitening) - This is what facenet-pytorch expects
         img = (img.astype(np.float32) - 127.5) / 128.0
         # to Tensor
-        img = (
-            torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float().to(self.device)
-        )
+        img = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float().to(self.device)
         return img
 
     @torch.no_grad()
@@ -61,9 +58,7 @@ class FaceVerifier:
         crop_h, crop_w = int(h * h_crop_percent), int(w * w_crop_percent)
         start_y, start_x = (h - crop_h) // 2, (w - crop_w) // 2
 
-        x_cropped = x_tensor[
-            :, :, start_y : start_y + crop_h, start_x : start_x + crop_w
-        ]
+        x_cropped = x_tensor[:, :, start_y : start_y + crop_h, start_x : start_x + crop_w]
 
         # The cropped tensor is then resized to 160x160 using bilinear interpolation
         # to match the input requirements of InceptionResnetV1.

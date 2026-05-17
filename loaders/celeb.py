@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple, Union
+from typing import List, Tuple, Union
 
 import torch
 from torch.utils.data import DataLoader
@@ -6,6 +6,7 @@ from torchvision import transforms
 from torchvision.datasets import CelebA
 
 from helpers.image_utils import get_transforms
+
 
 class CelebDataset(CelebA):
     def __init__(
@@ -78,9 +79,7 @@ class CelebDataset(CelebA):
         elif isinstance(attr_target, str):
             self.selected_indices = torch.tensor([self.all_labels.index(attr_target)])
         elif isinstance(attr_target, list):
-            self.selected_indices = torch.tensor(
-                [self.all_labels.index(a) for a in attr_target]
-            )
+            self.selected_indices = torch.tensor([self.all_labels.index(a) for a in attr_target])
 
         # Store selected label names for string formatting
         self.selected_labels = [self.all_labels[i] for i in self.selected_indices]

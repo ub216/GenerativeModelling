@@ -6,9 +6,10 @@ without a network connection or GPU. Mark slow tests with @pytest.mark.slow
 if you want to skip them in fast CI runs (`pytest -m "not slow"`).
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 import torch
-from unittest.mock import MagicMock, patch
 
 from models.latent_diffusion import LatentDiffusionModel
 
@@ -47,9 +48,7 @@ def _make_mock_vae(latent_b=2, img_h=32, img_w=32):
     vae.encode.return_value = MagicMock(latent_dist=mock_dist)
 
     # decoder: decode(z).sample → pixel tensor
-    vae.decode.return_value = MagicMock(
-        sample=torch.zeros(latent_b, 3, img_h, img_w)
-    )
+    vae.decode.return_value = MagicMock(sample=torch.zeros(latent_b, 3, img_h, img_w))
     return vae
 
 
@@ -69,6 +68,7 @@ def model(mock_vae):
 # Initialisation
 # ---------------------------------------------------------------------------
 
+
 class TestInit:
     def test_scaling_factor_set(self, model):
         assert model.scaling_factor == pytest.approx(0.18215)
@@ -77,18 +77,23 @@ class TestInit:
         assert model.timesteps == _TINY_KWARGS["timesteps"]
 
     def test_vae_put_in_eval_mode(self, mock_vae):
-        with patch("models.latent_diffusion.AutoencoderKL.from_pretrained", return_value=mock_vae):
+        with patch(
+            "models.latent_diffusion.AutoencoderKL.from_pretrained",
+            return_value=mock_vae,
+        ):
             LatentDiffusionModel(**_TINY_KWARGS)
         mock_vae.eval.assert_called()
 
     def test_internal_diffusion_model_exists(self, model):
         from models.diffusion import DiffusionModel
+
         assert isinstance(model.model, DiffusionModel)
 
 
 # ---------------------------------------------------------------------------
 # encode / decode
 # ---------------------------------------------------------------------------
+
 
 class TestEncodeDecode:
     def test_encode_shape(self, model):
@@ -98,9 +103,7 @@ class TestEncodeDecode:
 
     def test_encode_applies_scaling_factor(self, model, mock_vae):
         """Latents must be multiplied by scaling_factor after sampling."""
-        mock_vae.encode.return_value.latent_dist.sample.return_value = torch.ones(
-            2, _LATENT_C, _LATENT_HW, _LATENT_HW
-        )
+        mock_vae.encode.return_value.latent_dist.sample.return_value = torch.ones(2, _LATENT_C, _LATENT_HW, _LATENT_HW)
         x = torch.rand(2, 3, 32, 32)
         latents = model.encode(x)
         expected = 1.0 * model.scaling_factor
@@ -124,6 +127,7 @@ class TestEncodeDecode:
 # forward
 # ---------------------------------------------------------------------------
 
+
 class TestForward:
     def test_output_shapes(self, model):
         x = torch.rand(2, 3, 32, 32)
@@ -134,7 +138,10 @@ class TestForward:
 
     def test_renormalise_maps_input(self, mock_vae):
         """With renormalise=True, input [0,1] is mapped to [-1,1] before encoding."""
-        with patch("models.latent_diffusion.AutoencoderKL.from_pretrained", return_value=mock_vae):
+        with patch(
+            "models.latent_diffusion.AutoencoderKL.from_pretrained",
+            return_value=mock_vae,
+        ):
             m = LatentDiffusionModel(**{**_TINY_KWARGS, "renormalise": True})
         x = torch.rand(2, 3, 32, 32)
         pred, target, _ = m(x)
@@ -144,6 +151,7 @@ class TestForward:
 # ---------------------------------------------------------------------------
 # sample
 # ---------------------------------------------------------------------------
+
 
 class TestSample:
     def test_output_shape(self, model):

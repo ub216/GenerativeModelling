@@ -2,9 +2,8 @@ from typing import List, Optional
 
 import torch
 import torch.nn as nn
-from torch.nn import functional as F
-
 from loguru import logger
+from torch.nn import functional as F
 
 import helpers.custom_types as custom_types
 from models.backbone.residual_conv import ResidualConv
@@ -54,23 +53,13 @@ class SimpleUNet(nn.Module):
         ch = base_channels
         for mult in channel_mults:
             out_ch = base_channels * mult
-            self.encs.append(
-                ResidualConv(
-                    ch, out_ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim
-                )
-            )
-            self.downs.append(
-                nn.Conv2d(out_ch, out_ch, kernel_size=3, stride=2, padding=1)
-            )  # downsample
+            self.encs.append(ResidualConv(ch, out_ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim))
+            self.downs.append(nn.Conv2d(out_ch, out_ch, kernel_size=3, stride=2, padding=1))  # downsample
             ch = out_ch
 
         # Bottleneck
-        self.mid1 = ResidualConv(
-            ch, ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim
-        )
-        self.mid2 = ResidualConv(
-            ch, ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim
-        )
+        self.mid1 = ResidualConv(ch, ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim)
+        self.mid2 = ResidualConv(ch, ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim)
 
         # Decoder
         self.ups = nn.ModuleList()
@@ -78,9 +67,7 @@ class SimpleUNet(nn.Module):
         rev_mults = list(channel_mults)[::-1]
         for mult in rev_mults:
             out_ch = base_channels * mult
-            self.ups.append(
-                nn.ConvTranspose2d(ch, out_ch, kernel_size=4, stride=2, padding=1)
-            )  # upsample x2
+            self.ups.append(nn.ConvTranspose2d(ch, out_ch, kernel_size=4, stride=2, padding=1))  # upsample x2
             self.decs.append(
                 ResidualConv(
                     out_ch * 2,
@@ -93,9 +80,7 @@ class SimpleUNet(nn.Module):
 
         self.out_norm = nn.GroupNorm(8, ch) if ch >= 8 else nn.BatchNorm2d(ch)
         self.out_act = nn.SiLU()
-        self.out_conv = nn.Conv2d(
-            ch, in_channels, kernel_size=3, padding=1
-        )  # predict noise
+        self.out_conv = nn.Conv2d(ch, in_channels, kernel_size=3, padding=1)  # predict noise
 
     def forward(
         self,
@@ -118,9 +103,7 @@ class SimpleUNet(nn.Module):
         # as input. Helps reduce computation while sampling
         text_emb = (
             self.text_model(conditioning)
-            if text_emb is None
-            and conditioning is not None
-            and self.text_model is not None
+            if text_emb is None and conditioning is not None and self.text_model is not None
             else text_emb
         )
 
@@ -139,7 +122,7 @@ class SimpleUNet(nn.Module):
         # decode
         for up, dec, skip in zip(self.ups, self.decs, reversed(hs)):
             h = up(h)
-            # if shapes mismatch due to odd sizes, center-crop or pad (here we assume divisible by 2**len(channel_mults))
+            # if shapes mismatch due to odd sizes, center-crop or pad
             if h.shape[-2:] != skip.shape[-2:]:
                 # naive center crop/pad to match
                 diff_y = skip.shape[-2] - h.shape[-2]
