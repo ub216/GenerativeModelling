@@ -159,7 +159,7 @@ def train(
     device: custom_types.DeviceType,
     epochs: int = 10,
     start_epoch: int = 0,
-    metric_interval: int = 1,
+    metric_interval: int | None = None,
     sample_interval: int = 1,
     save_dir: str = "./",
     save_after_epoch: int = float("inf"),
@@ -197,7 +197,7 @@ def train(
                 dataloader=dataloader,
             )
         # Generate evaluation samples/metrics
-        if (epoch + 1) % metric_interval == 0 or epoch + 1 == epochs:
+        if metric_interval is not None and ((epoch + 1) % metric_interval == 0 or epoch + 1 == epochs):
 
             curr_score = prev_best_score
             for metric in compute_metrics:
@@ -319,6 +319,12 @@ def main(config_path: str = "config.yaml"):
 
     # Metrics
     compute_metrics = get_metrics(cfg.get("metrics", None))
+    metric_interval = cfg["training"].get("metric_interval", None)
+    if compute_metrics and metric_interval is None:
+        logger.warning(
+            "Metrics are defined but 'metric_interval' is not set in training config. "
+            "Metric computation will be skipped. Set training.metric_interval to enable it."
+        )
 
     # Training loop
     train(
@@ -328,7 +334,7 @@ def main(config_path: str = "config.yaml"):
         optimizer_manager,
         criterion,
         compute_metrics,
-        metric_interval=cfg["training"]["metric_interval"],
+        metric_interval=metric_interval,
         sample_interval=cfg["training"].get("sample_interval", 1),
         device=cfg["training"]["device"],
         epochs=cfg["training"]["epochs"],
