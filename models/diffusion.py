@@ -202,6 +202,8 @@ class DiffusionModel(BaseModel):
             c_batch = conditioning[idx * batch_size : idx * batch_size + cur_bs] if conditioning else None
             u_batch = [""] * cur_bs if self.has_conditional_generation else None
 
+            text_emb_cache = self.unet.text_model(c_batch + u_batch) if self.has_conditional_generation else None
+
             for t_curr, t_next in time_pairs:
                 t_batch = torch.full((cur_bs,), t_curr, device=device, dtype=torch.long)
 
@@ -210,7 +212,7 @@ class DiffusionModel(BaseModel):
                     eps_all, _ = self.unet(
                         torch.cat([x_t, x_t]),
                         torch.cat([t_batch, t_batch]),
-                        conditioning=c_batch + u_batch,
+                        text_emb=text_emb_cache,
                     )
                     e_cond, e_uncond = eps_all.chunk(2)
                     eps_theta = e_uncond + self.sample_condition_weight * (e_cond - e_uncond)
@@ -256,6 +258,8 @@ class DiffusionModel(BaseModel):
             c_batch = conditioning[idx * batch_size : idx * batch_size + cur_bs] if conditioning else None
             u_batch = [""] * cur_bs if self.has_conditional_generation else None
 
+            text_emb_cache = self.unet.text_model(c_batch + u_batch) if self.has_conditional_generation else None
+
             for t in reversed(range(self.test_timesteps)):
                 t_batch = torch.full((cur_bs,), t, device=device, dtype=torch.long)
 
@@ -263,7 +267,7 @@ class DiffusionModel(BaseModel):
                     eps_all, _ = self.unet(
                         torch.cat([x_t, x_t]),
                         torch.cat([t_batch, t_batch]),
-                        conditioning=c_batch + u_batch,
+                        text_emb=text_emb_cache,
                     )
                     e_cond, e_uncond = eps_all.chunk(2)
                     eps_theta = e_uncond + self.sample_condition_weight * (e_cond - e_uncond)

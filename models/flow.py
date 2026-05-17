@@ -150,15 +150,19 @@ class FlowModel(BaseModel):
             cond_batch = conditioning[idx * batch_size : idx * batch_size + cur_bs] if conditioning else None
             uncond_batch = [""] * cur_bs if self.has_conditional_generation else None
 
+            # Pre-compute text embeddings once per batch rather than re-encoding every timestep.
+            text_emb_cache = (
+                self.unet.text_model(cond_batch + uncond_batch) if self.has_conditional_generation else None
+            )
+
             for t in reversed(range(self.test_timesteps)):
                 vec_t = torch.full((cur_bs,), t * self.test_delta, device=device)
 
                 if self.has_conditional_generation:
                     batched_x = torch.cat([x_t, x_t], dim=0)
                     batched_t = torch.cat([vec_t, vec_t], dim=0)
-                    batched_cond = cond_batch + uncond_batch
 
-                    batched_flow, _ = self.unet(batched_x, batched_t, conditioning=batched_cond)
+                    batched_flow, _ = self.unet(batched_x, batched_t, text_emb=text_emb_cache)
 
                     flow_cond, flow_uncond = batched_flow.chunk(2)
                     flow = flow_uncond + self.sample_condition_weight * (flow_cond - flow_uncond)
