@@ -291,6 +291,11 @@ def main(config_path: str = "config.yaml"):
     model.to(cfg["training"]["device"])
     model_ema.to(cfg["training"]["device"])
 
+    if cfg["training"].get("compile", False):
+        logger.info("Compiling model with torch.compile(mode='reduce-overhead')...")
+        model = torch.compile(model, mode="reduce-overhead")
+        model_ema.model = torch.compile(model_ema.model, mode="reduce-overhead")
+
     # Setup loss
     criterion = get_loss_function(cfg["loss"])
 
