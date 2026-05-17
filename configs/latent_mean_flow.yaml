@@ -1,0 +1,68 @@
+experiment:
+  name: "LatentMeanFlow"
+  seed: 42
+
+model:
+  type: "latent_mean_flow"
+  params:
+    timesteps: 1000
+    test_timesteps: 1                  # one-step generation (arXiv:2505.13447)
+    base_channels: 128
+    channel_mults: [1, 2, 4]
+    num_blocks: [2, 2, 4]
+    use_attention: true
+    time_emb_dim: 128
+    text_emb_dim: 128                  # Set to null if CFG not required
+    renormalise: true
+    compile_vae: false                 # keep false — training.compile already compiles the full model
+    # MeanFlow hyperparameters — ImageNet B/2 Table 4 (arXiv:2505.13447)
+    same_time_ratio: 0.75              # 75% of batch has r=t forced; 25% r≠t
+    kappa: 0.5                         # κ in Eq 21; effective guidance scale ω'=ω/(1-κ)=2.0
+    logit_sigma: 1.0                   # logit-normal σ for time sampling
+    logit_mu: -0.4                     # logit-normal μ for time sampling
+    drop_condition_ratio: 0.1          # 10% unconditional training (Sec 4.2)
+    sample_condition_weight: 1.0       # ω = 1.0 (ImageNet B/2 Table 4)
+  checkpoint: null
+
+optimizer:
+  type: "adamw"
+  params:
+    lr: 0.0001
+    weight_decay: 0.01
+  accumulate_steps: 1
+  max_grad_norm: 1.0
+
+training:
+  batch_size: 96
+  epochs: 300
+  device: "cuda"
+  metric_interval: 1000
+  ema_decay: 0.9999
+  save_after_epoch: 10
+  amp_dtype: "auto"                    # "auto" | "bfloat16" | "float16" | "disabled"
+  sample_interval: 1                   # generate sample images every N epochs
+  compile: true                        # torch.compile for kernel fusion (~20-30% speedup after warmup)
+
+evaluation:
+  samples: 64
+
+dataset:
+  type: "celeb_hq"
+  params:
+    root: "/data/datasets/CelebA/celeba_hq/"
+    num_workers: 8
+    pin_memory: true
+    persistent_workers: true
+    image_size: [256, 256]
+    attr_target: "smiling"
+
+loss:
+  type: "pair_mad"                     # L1 loss; outperforms MSE for MeanFlow per paper ablation
+  params:
+    reduction: "mean"
+
+metrics:
+  fid:
+    type: "fid_inception"
+    params:
+      samples: 8000

@@ -107,6 +107,10 @@ def get_model(
         return models.LatentFlowModel(**params), (
             models.EMAModel(models.LatentFlowModel(**params), decay=ema_decay) if build_ema else None
         )
+    elif name == "latent_mean_flow":
+        return models.LatentMeanFlowModel(**params), (
+            models.EMAModel(models.LatentMeanFlowModel(**params), decay=ema_decay) if build_ema else None
+        )
     elif name == "mean_flow":
         return models.MeanFlowModel(**params), (
             models.EMAModel(models.MeanFlowModel(**params), decay=ema_decay) if build_ema else None
