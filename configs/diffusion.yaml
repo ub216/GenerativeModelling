@@ -25,6 +25,7 @@ training:
   metric_interval: 500
   save_after_epoch: -1
   amp_dtype: "auto"                     # "auto" | "bfloat16" | "float16" | "disabled"
+  sample_interval: 5                    # generate sample images every N epochs (independent of metric_interval)
 
 evaluation:
   samples: 100                          # Only used for evaluation run

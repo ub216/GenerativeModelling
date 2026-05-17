@@ -160,6 +160,7 @@ def train(
     epochs: int = 10,
     start_epoch: int = 0,
     metric_interval: int = 1,
+    sample_interval: int = 1,
     save_dir: str = "./",
     save_after_epoch: int = float("inf"),
     amp_dtype: torch.dtype | None = torch.float16,
@@ -174,26 +175,27 @@ def train(
         wandb.log({"epoch_time": epoch_time}, step=(epoch + 1) * len(dataloader))
         wandb.log({"epoch_loss": epoch_loss}, step=(epoch + 1) * len(dataloader))
 
-        # Generate samples for monitoring
-        eval_sample(
-            model,
-            num_samples=9,
-            device=device,
-            image_size=dataloader.image_size,
-            step=(epoch + 1) * len(dataloader),
-            save_dir=save_dir,
-            dataloader=dataloader,
-            is_ema=False,
-        )
-        eval_sample(
-            model_ema,
-            num_samples=9,
-            device=device,
-            image_size=dataloader.image_size,
-            step=(epoch + 1) * len(dataloader),
-            save_dir=save_dir,
-            dataloader=dataloader,
-        )
+        # Generate samples for monitoring (cheaper than FID; gated independently)
+        if (epoch + 1) % sample_interval == 0 or epoch + 1 == epochs:
+            eval_sample(
+                model,
+                num_samples=9,
+                device=device,
+                image_size=dataloader.image_size,
+                step=(epoch + 1) * len(dataloader),
+                save_dir=save_dir,
+                dataloader=dataloader,
+                is_ema=False,
+            )
+            eval_sample(
+                model_ema,
+                num_samples=9,
+                device=device,
+                image_size=dataloader.image_size,
+                step=(epoch + 1) * len(dataloader),
+                save_dir=save_dir,
+                dataloader=dataloader,
+            )
         # Generate evaluation samples/metrics
         if (epoch + 1) % metric_interval == 0 or epoch + 1 == epochs:
 
@@ -327,6 +329,7 @@ def main(config_path: str = "config.yaml"):
         criterion,
         compute_metrics,
         metric_interval=cfg["training"]["metric_interval"],
+        sample_interval=cfg["training"].get("sample_interval", 1),
         device=cfg["training"]["device"],
         epochs=cfg["training"]["epochs"],
         start_epoch=start_epoch,

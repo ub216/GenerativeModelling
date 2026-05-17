@@ -19,6 +19,7 @@ training:
   device: "cuda"
   metric_interval: 1
   amp_dtype: "auto"                     # "auto" | "bfloat16" | "float16" | "disabled"
+  sample_interval: 5                    # generate sample images every N epochs (independent of metric_interval)
 
 dataset:
   type: "mnist"                       # options: mnist, imagenet, coco

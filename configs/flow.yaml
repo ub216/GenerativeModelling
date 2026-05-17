@@ -22,6 +22,7 @@ training:
   device: "cuda"
   metric_interval: 5
   amp_dtype: "auto"                     # "auto" | "bfloat16" | "float16" | "disabled"
+  sample_interval: 5                    # generate sample images every N epochs (independent of metric_interval)
 
 evaluation:                          # Only used for evaluation run
   samples: 100
