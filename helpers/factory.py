@@ -134,7 +134,11 @@ def _get_optimizer(name: str, paramertes, options: Dict[str, Any]) -> torch.opti
         raise ValueError(f"Unknown optimizer: {name}")
 
 
-def get_optimizer_manager(cfg: Dict[str, Any], model: custom_types.GenBaseModel) -> OptimizerManager:
+def get_optimizer_manager(
+    cfg: Dict[str, Any],
+    model: custom_types.GenBaseModel,
+    amp_dtype: torch.dtype | None = torch.float16,
+) -> OptimizerManager:
     optimizer = {}
     if "type" in cfg:
         # single optimizer for all parameters
@@ -144,10 +148,12 @@ def get_optimizer_manager(cfg: Dict[str, Any], model: custom_types.GenBaseModel)
             module = getattr(model, name, None)
             assert module is not None, f"{module} does not exists in model parameter groups"
             optimizer[name] = _get_optimizer(key["type"], module.parameters(), key.get("params", {}))
+    # GradScaler is only needed for FP16 overflow recovery; BF16 and disabled AMP don't need it
+    use_scaler = amp_dtype == torch.float16
     optimizer_manager = OptimizerManager(
         optimizer,
         model=model,
-        use_scaler=True,
+        use_scaler=use_scaler,
         accumulate_steps=cfg.get("accumulate_steps", 1),
         max_grad_norm=cfg.get("max_grad_norm", float("inf")),
     )

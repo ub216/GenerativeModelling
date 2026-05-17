@@ -6,7 +6,7 @@ model:
   params:
     dropout: 0.5
     feature_dims: [32, 64, 128, 256]
-  checkpoint: null 
+  checkpoint: null
 
 optimizer:
   type: "adam"                       # could also be sgd, adamw, etc. (not yet added support)
@@ -18,8 +18,9 @@ training:
   batch_size: 64
   epochs: 100
   device: "cuda"
-  metric_interval: 1 
-    
+  metric_interval: 1
+  amp_dtype: "auto"                     # "auto" | "bfloat16" | "float16" | "disabled"
+
 dataset:
   type: "celeb"                       # options: mnist, imagenet, coco
   params:
@@ -39,5 +40,5 @@ loss:
 metrics:
   fid:
     type: "fid_inception"
-    params: 
+    params:
       samples: 16000

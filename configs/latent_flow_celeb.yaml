@@ -33,6 +33,7 @@ training:
   metric_interval: 1000
   ema_decay: 0.9999
   save_after_epoch: 10
+  amp_dtype: "auto"                     # "auto" | "bfloat16" | "float16" | "disabled"
 
 evaluation:
   samples: 64

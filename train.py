@@ -1,4 +1,5 @@
 import argparse
+import contextlib
 import os
 import shutil
 import time
@@ -31,6 +32,7 @@ def train_one_epoch(
     criterion: torch.nn.Module,
     device: custom_types.DeviceType,
     epoch: int = 0,
+    amp_dtype: torch.dtype | None = torch.float16,
 ) -> torch.Tensor:
     t0 = time.time()
     model.train()
@@ -48,7 +50,8 @@ def train_one_epoch(
             conditioning = labels
 
         # forward pass with AMP
-        with autocast(device_type="cuda", dtype=torch.float16):
+        amp_ctx = autocast(device_type="cuda", dtype=amp_dtype) if amp_dtype else contextlib.nullcontext()
+        with amp_ctx:
             outputs = model(inputs, conditioning=conditioning)
             loss = criterion(outputs, inputs)
 
@@ -159,11 +162,14 @@ def train(
     metric_interval: int = 1,
     save_dir: str = "./",
     save_after_epoch: int = float("inf"),
+    amp_dtype: torch.dtype | None = torch.float16,
 ):
     prev_best_score = float("inf")
     for epoch in range(start_epoch, epochs):
         t0 = time.time()
-        epoch_loss = train_one_epoch(model, model_ema, dataloader, optimizer_manager, criterion, device, epoch)
+        epoch_loss = train_one_epoch(
+            model, model_ema, dataloader, optimizer_manager, criterion, device, epoch, amp_dtype
+        )
         epoch_time = time.time() - t0
         wandb.log({"epoch_time": epoch_time}, step=(epoch + 1) * len(dataloader))
         wandb.log({"epoch_loss": epoch_loss}, step=(epoch + 1) * len(dataloader))
@@ -248,6 +254,18 @@ def main(config_path: str = "config.yaml"):
     torch.backends.cudnn.benchmark = True
     torch.backends.cudnn.enabled = True
 
+    # Resolve AMP dtype from config; "auto" picks BF16 on supported hardware
+    _dtype_cfg = cfg["training"].get("amp_dtype", "auto")
+    if _dtype_cfg == "auto":
+        amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+    elif _dtype_cfg == "bfloat16":
+        amp_dtype = torch.bfloat16
+    elif _dtype_cfg == "float16":
+        amp_dtype = torch.float16
+    else:
+        amp_dtype = None  # AMP disabled
+    logger.info(f"AMP dtype: {amp_dtype} (config: {_dtype_cfg!r})")
+
     # Setup experiment
     torch.manual_seed(cfg["experiment"].get("seed", 42))
     logger.info(f"Torch seed set to {cfg['experiment'].get('seed', 42)}")
@@ -277,7 +295,7 @@ def main(config_path: str = "config.yaml"):
     criterion = get_loss_function(cfg["loss"])
 
     # Setup Optimizer. This is done after the model is intialized
-    optimizer_manager = get_optimizer_manager(cfg["optimizer"], model)
+    optimizer_manager = get_optimizer_manager(cfg["optimizer"], model, amp_dtype=amp_dtype)
 
     # Load checkpoint if provided
     start_epoch = 0
@@ -309,6 +327,7 @@ def main(config_path: str = "config.yaml"):
         start_epoch=start_epoch,
         save_dir=f"./runs/{run_name}",
         save_after_epoch=cfg["training"].get("save_after_epoch", float("inf")),
+        amp_dtype=amp_dtype,
     )
 
 

@@ -11,23 +11,24 @@ model:
     sample_condition_weight: 10
   checkpoint: null                      # Use for evaluation or restarting training
 
-optimizer:                              
-  type: "adam"                          
+optimizer:
+  type: "adam"
   params:
     lr: 0.001
     weight_decay: 0.0
-  accumulate_steps: 1                   # Number of steps to accumulate gradients over  
+  accumulate_steps: 1                   # Number of steps to accumulate gradients over
 
 training:
   batch_size: 64
   epochs: 50
   device: "cuda"
   metric_interval: 500
-  save_after_epoch: -1  
+  save_after_epoch: -1
+  amp_dtype: "auto"                     # "auto" | "bfloat16" | "float16" | "disabled"
 
 evaluation:
   samples: 100                          # Only used for evaluation run
-    
+
 dataset:
   type: "mnist"                         # options: mnist (imagenet, coco, .. in future)
   params:
@@ -44,5 +45,5 @@ loss:
 metrics:
   fid:
     type: "fid_inception"
-    params: 
+    params:
       samples: 8000

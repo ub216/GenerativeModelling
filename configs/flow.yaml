@@ -5,7 +5,7 @@ model:
   type: "flow"                       # options: vae, diffusion, flow, etc.
   params:
     timesteps: 1000
-    test_timesteps: 200    
+    test_timesteps: 200
     text_emb_dim: 128                # Set to null if CFG not required
     sample_condition_weight: 10
   checkpoint: null                   # Use for evaluation or restarting training
@@ -21,6 +21,7 @@ training:
   epochs: 50
   device: "cuda"
   metric_interval: 5
+  amp_dtype: "auto"                     # "auto" | "bfloat16" | "float16" | "disabled"
 
 evaluation:                          # Only used for evaluation run
   samples: 100
@@ -41,5 +42,5 @@ loss:
 metrics:
   fid:
     type: "fid_inception"
-    params: 
+    params:
       samples: 16000

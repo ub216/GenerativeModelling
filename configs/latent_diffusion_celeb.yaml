@@ -19,13 +19,13 @@ model:
     schedule_type: "linear"
   checkpoint: runs/latent_diffusion_celeb_hq_20260130-104518/epoch_301_truncated.pth     # Use for evaluation or restarting training
 
-optimizer:                              
-  type: "adamw"                          
+optimizer:
+  type: "adamw"
   params:
     lr: 0.0001
     weight_decay: 0.01
   accumulate_steps: 1                   # Number of steps to accumulate gradients over
-  max_grad_norm: 1.0                    # Set to inf to disable gradient clipping  
+  max_grad_norm: 1.0                    # Set to inf to disable gradient clipping
 
 training:
   batch_size: 96
@@ -34,10 +34,11 @@ training:
   metric_interval: 1000
   ema_decay: 0.9999                    # Set to 0 to disable EMA
   save_after_epoch: 10                # Save all checkpoints after this epoch
+  amp_dtype: "auto"                     # "auto" | "bfloat16" | "float16" | "disabled"
 
 evaluation:
   samples: 64                          # Only used for evaluation run
-    
+
 dataset:
   type: "celeb_hq"                         # options: mnist (imagenet, coco, .. in future)
   params:
@@ -56,5 +57,5 @@ loss:
 metrics:
   fid:
     type: "fid_inception"
-    params: 
+    params:
       samples: 8000
