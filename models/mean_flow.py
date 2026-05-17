@@ -91,12 +91,16 @@ class MeanFlowModel(FlowModel):
         if self.renormalize:
             x0 = x0 * 2.0 - 1.0  # to [-1, 1]
 
+        b = x0.shape[0]
         if time_steps is None:
-            b = x0.shape[0]
+            # Logit-normal sampling (Sec 3.3): sigmoid maps a normal onto (0,1) with more mass near
+            # 0 and 1 than uniform sampling, which focuses training on the harder boundary regions.
             time_steps = torch.sigmoid(torch.randn(b, 2, device=x0.device) * self.logit_sigma + self.logit_mu)
-            time_steps = torch.sort(time_steps, dim=1, descending=True).values  # ensure t > r (t0 > t1)
+            time_steps = torch.sort(time_steps, dim=1, descending=True).values  # ensure t >= r: col0=t, col1=r
             same_time = torch.rand(b, device=x0.device) < self.same_time_ratio
-            time_steps[same_time] = time_steps[same_time][:, 0:1]  # set t=r for some samples
+            # Boundary condition (Eq 7): u(z_t, t, t) = v(z_t, t). Setting r=t forces the network
+            # to match the instantaneous velocity at zero interval, stabilising early training.
+            time_steps[same_time] = time_steps[same_time][:, 0:1]  # set r=t for same_time_ratio of the batch
 
         if x1 is None:
             x1 = torch.randn_like(x0)
@@ -109,32 +113,48 @@ class MeanFlowModel(FlowModel):
             self.unet.text_model(conditioning)
             if conditioning is not None and self.unet.text_model is not None
             else None
-        )  # vt = noise - z0
+        )
         if self.has_conditional_generation:
             with torch.no_grad():
                 same_timesteps = torch.stack([time_steps[:, 0], torch.zeros_like(time_steps[:, 0])], dim=1)
-                u_cond, _ = self.unet(intermidiate, same_timesteps, text_emb=text_emb)
-                u_uncond, _ = self.unet(intermidiate, same_timesteps, text_emb=None)
+                # Batch cond and uncond into one forward pass. Empty-string embedding for uncond
+                # matches training behaviour (drop_condition replaces strings with "", not None).
+                empty_emb = self.unet.text_model([""] * b)
+                batched_z = torch.cat([intermidiate, intermidiate], dim=0)
+                batched_t = torch.cat([same_timesteps, same_timesteps], dim=0)
+                batched_emb = torch.cat([text_emb, empty_emb], dim=0)
+                u_both, _ = self.unet(batched_z, batched_t, text_emb=batched_emb)
+                u_cond, u_uncond = u_both.chunk(2)
                 flow = (
                     self.sample_condition_weight * flow
                     + self.kappa * u_cond
                     + (1 - self.sample_condition_weight - self.kappa) * u_uncond
                 )  # vt^cfg = w*vt + kappa*u_cond + (1-w-kappa)*u_uncond
         time_conditioning = time_steps.clone()
-        time_conditioning[:, 1] = (
-            time_steps[:, 0] - time_steps[:, 1]
-        )  # second time input is the duration (t-r) instead of absolute time r
+        # Network is conditioned on (t, Δt=t-r) rather than (t, r) so the Δt=0 boundary is a
+        # single clean value regardless of t, making it easier for the model to learn Eq 7.
+        time_conditioning[:, 1] = time_steps[:, 0] - time_steps[:, 1]  # col1: r -> Δt = t - r
 
         # Compute the predicted mean flow and the time derivative using the Jacobian-vector product (JVP)
+        # TODO: this closure captures text_emb as a free variable, which causes TorchDynamo to add a
+        # shape/dtype guard on it and may trigger recompilation when batch size changes, or a graph break
+        # at the jvp site under torch.compile. Fix: refactor fn to take text_emb as an explicit primal
+        # using torch.func.functional_call so all tensor inputs are visible to the compiler. Check first
+        # with TORCH_LOGS=graph_breaks — if no break is reported the current form is fine.
         def fn(z, t_cond):
             return self.unet(z, t_cond, text_emb=text_emb)[0]
 
+        # Tangent is [1, 1], not [1, 0]. We want du/dt holding r fixed, i.e. the total derivative
+        # along the trajectory. In (t, Δt) coordinates, d(Δt)/dt = d(t-r)/dt = 1 when r is fixed,
+        # so both components advance together. Using [1, 0] would compute the partial w.r.t. t
+        # holding Δt fixed, which is a different (and wrong) quantity.
         time_tangent = torch.ones_like(time_conditioning)
         pred_u, dudt = jvp(fn, (intermidiate, time_conditioning), (flow, time_tangent))
 
-        target_u = (
-            flow - (time_steps[:, 0] - time_steps[:, 1]).view(-1, 1, 1, 1) * dudt.detach()
-        )  # v = z1-z0, du/dt = (u_pred - u) / (t-r) => u_pred = v - (t-r)*du/dt
+        # MeanFlow identity (Eq 6): u(z_t, r, t) = v(z_t, t) - (t-r) * du/dt
+        # pred_u approximates the left-hand side; target_u is the right-hand side computed from
+        # the instantaneous velocity v (=flow) and the JVP estimate of du/dt.
+        target_u = flow - (time_steps[:, 0] - time_steps[:, 1]).view(-1, 1, 1, 1) * dudt.detach()
         return pred_u, target_u
 
     @torch.no_grad()
@@ -167,6 +187,12 @@ class MeanFlowModel(FlowModel):
             x_t = torch.randn(cur_bs, self.in_channels, image_size[0], image_size[1], device=device)
 
             cond_batch = conditioning[idx * batch_size : idx * batch_size + cur_bs] if conditioning else None
+            # Encode text once per sample batch, not once per diffusion step
+            text_emb_cache = (
+                self.unet.text_model(cond_batch)
+                if cond_batch is not None and self.unet.text_model is not None
+                else None
+            )
 
             for t in range(self.test_timesteps, 0, -1):  # t is T, T-1, ..., 1
                 vec_t = torch.stack(
@@ -177,11 +203,7 @@ class MeanFlowModel(FlowModel):
                     dim=1,
                 )  # (B, 2) with start time step and delta time
 
-                if self.has_conditional_generation:
-
-                    u_pred, _ = self.unet(x_t, vec_t, conditioning=cond_batch)
-                else:
-                    u_pred, _ = self.unet(x_t, vec_t)
+                u_pred, _ = self.unet(x_t, vec_t, text_emb=text_emb_cache)
 
                 pred_x0 = x_t - self.test_delta * u_pred
                 if dynamic_threshold:
