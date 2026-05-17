@@ -162,9 +162,11 @@ class LatentFlowModel(BaseModel):
             threshold_coeff=15.0,
             clamp_output=False,
         )
-        logger.info(
-            f"Generated latents absolute distribution: " f"min {latents.abs().min():.4f}, max {latents.abs().max():.4f}"
-        )
+        if not torch.compiler.is_compiling():
+            logger.info(
+                f"Generated latents absolute distribution: "
+                f"min {latents.abs().min():.4f}, max {latents.abs().max():.4f}"
+            )
 
         all_images = []
         for i in range(0, latents.shape[0], batch_size):

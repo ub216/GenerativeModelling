@@ -164,10 +164,14 @@ class UNet(nn.Module):
             y = down(y)
 
         if self.use_attention:
-            log_once_info(f"Using attention in the bottleneck of UNet with bottleneck shape {y.shape}")
+            if not torch.compiler.is_compiling():
+                log_once_info(f"Using attention in the bottleneck of UNet with bottleneck shape {y.shape}")
             b, c, h, w = y.shape
             y = y.view(b, c, h * w).permute(0, 2, 1)  # (b, seq_len, c)
-            log_once_info(f"Reshaped bottleneck to {y.shape} for attention, pos_embed shape: {self.pos_embed.shape}")
+            if not torch.compiler.is_compiling():
+                log_once_info(
+                    f"Reshaped bottleneck to {y.shape} for attention, pos_embed shape: {self.pos_embed.shape}"
+                )
             curr_pos = self.pos_embed[:, :h, :w, :].reshape(1, h * w, c)  # (1, seq_len, c)
             y = y + curr_pos
 

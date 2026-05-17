@@ -168,7 +168,10 @@ class LatentDiffusionModel(BaseModel):
             clamp_output=False,
             **kwargs,
         )
-        logger.info(f"Generated latents absolute distribution: min {latents.abs().min()}, max {latents.abs().max()}")
+        if not torch.compiler.is_compiling():
+            logger.info(
+                f"Generated latents absolute distribution: min {latents.abs().min()}, max {latents.abs().max()}"
+            )
 
         # decode Latents to Pixels
         # We must process this in batches to avoid OOM on the VAE decoder
