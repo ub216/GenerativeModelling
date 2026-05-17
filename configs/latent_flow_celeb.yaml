@@ -29,7 +29,7 @@ optimizer:
 
 training:
   batch_size: 96
-  epochs: 601
+  epochs: 201
   device: "cuda"
   metric_interval: 1000
   ema_decay: 0.9999
