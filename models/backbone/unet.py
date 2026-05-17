@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -27,7 +27,9 @@ class UNet(nn.Module):
         base_channels: int = 64,
         channel_mults: List[int] = [1, 2, 4],
         num_blocks: Union[int, List[int]] = [1, 2, 2],
-        time_emb_dim: int = 128,
+        time_emb_dim: Union[
+            int, Tuple[int, int]
+        ] = 128,  # for mean flow, this can be a tuple specifying separate dims for start time and delta time
         text_emb_dim: Optional[int] = None,
         use_attention: bool = False,
         device: custom_types.DeviceType = "cuda",
@@ -46,15 +48,25 @@ class UNet(nn.Module):
 
         self.in_conv = nn.Conv2d(in_channels, base_channels, 3, padding=1)
 
-        self.time_mlp = nn.Sequential(
-            nn.Linear(time_emb_dim, time_emb_dim),
-            nn.SiLU(),
-            nn.Linear(time_emb_dim, time_emb_dim),
+        self.time_emb_dim = time_emb_dim
+        if isinstance(self.time_emb_dim, int):
+            self.time_emb_dim = (self.time_emb_dim,)  # make it a tuple for uniform processing
+        t_time_emb_dim = sum(self.time_emb_dim)
+
+        self.time_mlp = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(t, t),
+                    nn.SiLU(),
+                    nn.Linear(t, t),
+                )
+                for t in self.time_emb_dim
+            ]
         )
 
         if text_emb_dim is not None:
             tm = TextModel(device)
-            self.text_model = nn.Sequential(tm, nn.Linear(tm.dim, time_emb_dim))
+            self.text_model = nn.Sequential(tm, nn.Linear(tm.dim, text_emb_dim))
         else:
             self.text_model = None
 
@@ -74,7 +86,7 @@ class UNet(nn.Module):
                     ResidualConv(
                         block_in,
                         out_ch,
-                        time_emb_dim=time_emb_dim,
+                        time_emb_dim=t_time_emb_dim,
                         text_emb_dim=text_emb_dim,
                     )
                 )
@@ -85,19 +97,19 @@ class UNet(nn.Module):
 
         # Bottleneck
         if not use_attention:
-            self.mid1 = ResidualConv(ch, ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim)
-            self.mid2 = ResidualConv(ch, ch, time_emb_dim=time_emb_dim, text_emb_dim=text_emb_dim)
+            self.mid1 = ResidualConv(ch, ch, time_emb_dim=t_time_emb_dim, text_emb_dim=text_emb_dim)
+            self.mid2 = ResidualConv(ch, ch, time_emb_dim=t_time_emb_dim, text_emb_dim=text_emb_dim)
         else:
             self.mid1 = DiTBlock(
                 in_channels=ch,
                 out_channels=ch,
-                time_emb_dim=time_emb_dim,
+                time_emb_dim=t_time_emb_dim,
                 text_emb_dim=text_emb_dim,
             )
             self.mid2 = DiTBlock(
                 in_channels=ch,
                 out_channels=ch,
-                time_emb_dim=time_emb_dim,
+                time_emb_dim=t_time_emb_dim,
                 text_emb_dim=text_emb_dim,
             )
             bottleneck_grid = max_image_size // (2 ** len(channel_mults))
@@ -124,7 +136,7 @@ class UNet(nn.Module):
                     ResidualConv(
                         block_in,
                         out_ch,
-                        time_emb_dim=time_emb_dim,
+                        time_emb_dim=t_time_emb_dim,
                         text_emb_dim=text_emb_dim,
                     )
                 )
@@ -138,13 +150,21 @@ class UNet(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        timesteps: torch.Tensor,
+        timesteps: torch.Tensor,  # can be (B,) or (B, 2) for mean flow
         conditioning: Optional[List[str]] = None,
         text_emb: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         # Time Embedding
-        t_emb = sinusoidal_embedding(timesteps, self.time_mlp[0].in_features)
-        t_emb = self.time_mlp(t_emb)
+        if timesteps.ndim != len(self.time_emb_dim):
+            raise ValueError(
+                f"Expected timesteps shape to match time_emb_dim, got {timesteps.shape} and {self.time_emb_dim}"
+            )
+        if timesteps.ndim == 1:
+            timesteps = timesteps.unsqueeze(1)  # (B,) -> (B, 1)
+        t_emb = [sinusoidal_embedding(timesteps[:, i], self.time_emb_dim[i]) for i in range(len(self.time_emb_dim))]
+        t_emb = torch.cat(
+            [self.time_mlp[i](t_emb[i]) for i in range(len(self.time_emb_dim))], dim=1
+        )  # Final time embedding
 
         # Text Embedding
         # Compute text_emb on the conditioning only if they haven't
