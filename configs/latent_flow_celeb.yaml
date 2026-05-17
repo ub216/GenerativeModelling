@@ -1,0 +1,59 @@
+experiment:
+  name: "Generative"
+  seed: 42
+
+model:
+  type: "latent_flow"
+  params:
+    timesteps: 1000
+    test_timesteps: 200               # Flow ODEs converge in fewer steps than diffusion
+    base_channels: 128
+    channel_mults: [1, 2, 4]
+    num_blocks: [2, 2, 4]
+    use_attention: true
+    time_emb_dim: 128
+    text_emb_dim: 128                 # Set to null if CFG not required
+    sample_condition_weight: 10.0
+    renormalise: true
+    compile_vae: false
+  checkpoint: null                    # Use for evaluation or restarting training
+
+optimizer:
+  type: "adamw"
+  params:
+    lr: 0.0001
+    weight_decay: 0.01
+  accumulate_steps: 1
+  max_grad_norm: 1.0
+
+training:
+  batch_size: 96
+  epochs: 601
+  device: "cuda"
+  metric_interval: 1000
+  ema_decay: 0.9999
+  save_after_epoch: 10
+
+evaluation:
+  samples: 64
+
+dataset:
+  type: "celeb_hq"
+  params:
+    root: "/data/datasets/CelebA/celeba_hq/"
+    num_workers: 8
+    pin_memory: true
+    persistent_workers: true
+    image_size: [256, 256]
+    attr_target: "smiling"
+
+loss:
+  type: "pair_mse"
+  params:
+    reduction: "mean"
+
+metrics:
+  fid:
+    type: "fid_inception"
+    params:
+      samples: 8000

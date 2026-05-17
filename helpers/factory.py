@@ -101,6 +101,10 @@ def get_model(
         return models.DPOLatentDiffusionModel(**params), (
             models.EMAModel(models.DPOLatentDiffusionModel(**params), decay=ema_decay) if build_ema else None
         )
+    elif name == "latent_flow":
+        return models.LatentFlowModel(**params), (
+            models.EMAModel(models.LatentFlowModel(**params), decay=ema_decay) if build_ema else None
+        )
     else:
         raise ValueError(f"Unknown model type: {name}")
 
