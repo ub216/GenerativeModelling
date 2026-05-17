@@ -144,7 +144,7 @@ class FlowModel(BaseModel):
         self.unet.eval()
         samples = []
         for idx in range(math.ceil(num_samples / batch_size)):
-            cur_bs = min(batch_size, num_samples - len(samples))
+            cur_bs = min(batch_size, num_samples - idx * batch_size)
             x_t = torch.randn(cur_bs, self.in_channels, image_size[0], image_size[1], device=device)
 
             cond_batch = conditioning[idx * batch_size : idx * batch_size + cur_bs] if conditioning else None
