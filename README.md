@@ -17,6 +17,7 @@ As an example of its usage, we demonstrate image-to-video generation for facial 
 ## TODOs
 - [x] Add support for diffusion network
 - [x] Add support for flow matching
+- [x] Add support for [MeanFlow](https://arxiv.org/abs/2505.13447) (one-step generation)
 - [ ] Add support for GANs
 - [x] Add support for CFG in diffusion/flow
 - [x] Add support for latent diffusion model
@@ -107,7 +108,7 @@ You can donwload this model from [here](https://drive.google.com/file/d/1Pb9B6iu
 | <img src="assets/serious_face_progression_inf.gif" width="250"> | <img src="assets/serious_face_progression_inf_dpo.gif" width="250"> |
 | <img src="assets/serious_face_3_progression_inf.gif" width="250"> | <img src="assets/serious_face_3_progression_inf_dpo.gif" width="250"> |
 | <img src="assets/serious_face_2_progression_inf.gif" width="250"> | <img src="assets/serious_face_2_progression_inf_dpo.gif" width="250"> |
-### Note: 
+### Note:
 - We use invert then edit here. Could also be extended to SDEdit which adds randomness.
 - We use LDM with DiT blocks in bottleneck for better symmetry.
 - For DPO training we use facenet-pytroch for face similarity and [off-the-shelf](https://huggingface.co/abhilash88/face-emotion-detection) model for smile detection.
