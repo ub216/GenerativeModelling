@@ -56,7 +56,7 @@ class TestInit:
 
 class TestForward:
     def test_output_shapes_match_input(self, model, batch):
-        pred_u, target_u = model(batch)
+        pred_u, target_u, _ = model(batch)
         assert pred_u.shape == batch.shape
         assert target_u.shape == batch.shape
 
@@ -65,21 +65,35 @@ class TestForward:
         t = torch.rand(2)
         r = t * torch.rand(2)
         time_steps = torch.stack([t, r], dim=1)
-        pred_u, target_u = model(batch, time_steps=time_steps)
+        pred_u, target_u, _ = model(batch, time_steps=time_steps)
         assert pred_u.shape == batch.shape
 
     def test_explicit_x1_accepted(self, model, batch):
         x1 = torch.randn_like(batch)
-        pred_u, target_u = model(batch, x1=x1)
+        pred_u, target_u, _ = model(batch, x1=x1)
         assert pred_u.shape == batch.shape
 
     def test_invalid_combination_raises(self, model, batch):
         with pytest.raises(ValueError):
             model(batch, conditioning=["some text"])
 
-    def test_returns_two_tensors(self, model, batch):
+    def test_returns_three_tensors(self, model, batch):
         out = model(batch)
-        assert len(out) == 2
+        assert len(out) == 3
+
+    def test_same_time_mask_shape_and_dtype(self, model, batch):
+        # same_time is a bool tensor of shape [B] indicating boundary-condition samples (r==t).
+        _, _, same_time = model(batch)
+        assert same_time.shape == (batch.shape[0],)
+        assert same_time.dtype == torch.bool
+
+    def test_same_time_ratio_approximately_respected(self, model):
+        # Over a large batch the fraction of boundary samples should be near same_time_ratio.
+        # N=500: sigma ≤0.025 for any p in (0,1), so 3-sigma band is ±0.075 — inside the 0.1 tolerance.
+        x = torch.rand(500, 1, 8, 8)
+        _, _, same_time = model(x)
+        ratio = same_time.float().mean().item()
+        assert abs(ratio - model.same_time_ratio) < 0.1
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +109,7 @@ class TestMeanFlowIdentity:
         b = batch.shape[0]
         t = torch.rand(b)
         time_steps = torch.stack([t, t], dim=1)  # r = t everywhere
-        _, target_u = model(batch, time_steps=time_steps, x1=x1)
+        _, target_u, _ = model(batch, time_steps=time_steps, x1=x1)
         assert torch.allclose(target_u, x1 - batch, atol=1e-5)
 
     def test_target_differs_from_pred_when_t_neq_r(self, model, batch):
@@ -105,13 +119,13 @@ class TestMeanFlowIdentity:
         t = torch.full((2,), 0.8)
         r = torch.full((2,), 0.2)
         time_steps = torch.stack([t, r], dim=1)
-        pred_u, target_u = model(batch, time_steps=time_steps, x1=x1)
+        pred_u, target_u, _ = model(batch, time_steps=time_steps, x1=x1)
         assert not torch.allclose(pred_u, target_u, atol=1e-3)
 
     def test_pred_u_is_differentiable(self, model, batch):
         # Training requires gradients to flow through pred_u (the network output).
         x0 = batch.requires_grad_(False)
-        pred_u, _ = model(x0)
+        pred_u, _, _ = model(x0)
         loss = pred_u.mean()
         loss.backward()  # must not raise
 
@@ -127,14 +141,14 @@ class TestTimeSampling:
         # Patch forward to expose the sampled time_steps by passing them back out.
         # Easiest: run many samples and check no value escapes [0, 1].
         for _ in range(10):
-            pred_u, _ = model(batch)
+            pred_u, _, _ = model(batch)
         # If any time_step were outside (0,1), q_sample would silently extrapolate;
         # checking that forward completes without NaN/Inf is a proxy.
         assert not torch.isnan(pred_u).any()
         assert not torch.isinf(pred_u).any()
 
     def test_no_nan_in_output(self, model, batch):
-        pred_u, target_u = model(batch)
+        pred_u, target_u, _ = model(batch)
         assert not torch.isnan(pred_u).any()
         assert not torch.isnan(target_u).any()
 

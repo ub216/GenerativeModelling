@@ -34,6 +34,7 @@ class MeanFlowModel(FlowModel):
         kappa: float = 0.5,  # κ in Eq 21; CFG mixing weight (ImageNet B/2 Table 4)
         logit_sigma: float = 1.0,  # logit-normal σ; ImageNet B/2: lognorm(-0.4, 1.0) (Table 4)
         logit_mu: float = -0.4,  # logit-normal μ; concentrates mass away from t=0 boundary
+        use_finite_diff: bool = False,  # if True, estimate du/dt via finite differences (~half peak memory vs JVP)
         *args,
         **kwargs,
     ):
@@ -70,6 +71,7 @@ class MeanFlowModel(FlowModel):
         self.kappa = kappa
         self.logit_sigma = logit_sigma
         self.logit_mu = logit_mu
+        self.use_finite_diff = use_finite_diff
         self.has_conditional_generation = True if text_emb_dim is not None else False
         if self.has_conditional_generation:
             logger.info("Created a conditioned mean flow matching model")
@@ -100,7 +102,13 @@ class MeanFlowModel(FlowModel):
             same_time = torch.rand(b, device=x0.device) < self.same_time_ratio
             # Boundary condition (Eq 7): u(z_t, t, t) = v(z_t, t). Setting r=t forces the network
             # to match the instantaneous velocity at zero interval, stabilising early training.
-            time_steps[same_time] = time_steps[same_time][:, 0:1]  # set r=t for same_time_ratio of the batch
+            # torch.where instead of in-place masked scatter: index_put_ with a data-dependent
+            # boolean mask is not capturable by CUDA graphs (reduce-overhead compile mode).
+            time_steps = torch.where(same_time.unsqueeze(1), time_steps[:, 0:1].expand_as(time_steps), time_steps)
+        else:
+            # When explicit time_steps are provided (e.g. tests, evaluation), derive the boundary
+            # mask from whether t == r rather than sampling it randomly.
+            same_time = torch.isclose(time_steps[:, 0], time_steps[:, 1])
 
         if x1 is None:
             x1 = torch.randn_like(x0)
@@ -135,12 +143,6 @@ class MeanFlowModel(FlowModel):
         # single clean value regardless of t, making it easier for the model to learn Eq 7.
         time_conditioning[:, 1] = time_steps[:, 0] - time_steps[:, 1]  # col1: r -> Δt = t - r
 
-        # Compute the predicted mean flow and the time derivative using the Jacobian-vector product (JVP)
-        # TODO: this closure captures text_emb as a free variable, which causes TorchDynamo to add a
-        # shape/dtype guard on it and may trigger recompilation when batch size changes, or a graph break
-        # at the jvp site under torch.compile. Fix: refactor fn to take text_emb as an explicit primal
-        # using torch.func.functional_call so all tensor inputs are visible to the compiler. Check first
-        # with TORCH_LOGS=graph_breaks — if no break is reported the current form is fine.
         def fn(z, t_cond):
             return self.unet(z, t_cond, text_emb=text_emb)[0]
 
@@ -149,13 +151,37 @@ class MeanFlowModel(FlowModel):
         # so both components advance together. Using [1, 0] would compute the partial w.r.t. t
         # holding Δt fixed, which is a different (and wrong) quantity.
         time_tangent = torch.ones_like(time_conditioning)
-        pred_u, dudt = jvp(fn, (intermidiate, time_conditioning), (flow, time_tangent))
+        if self.use_finite_diff:
+            pred_u, dudt = self._fd_step(fn, intermidiate, time_conditioning, flow, time_tangent)
+        else:
+            pred_u, dudt = self._jvp_step(fn, intermidiate, time_conditioning, flow, time_tangent)
 
         # MeanFlow identity (Eq 6): u(z_t, r, t) = v(z_t, t) - (t-r) * du/dt
         # pred_u approximates the left-hand side; target_u is the right-hand side computed from
         # the instantaneous velocity v (=flow) and the JVP estimate of du/dt.
         target_u = flow - (time_steps[:, 0] - time_steps[:, 1]).view(-1, 1, 1, 1) * dudt.detach()
-        return pred_u, target_u
+        return pred_u, target_u, same_time
+
+    @torch.compiler.disable
+    def _jvp_step(self, fn, z, t_cond, flow, time_tangent):
+        # Exact du/dt via forward-mode AD. Each intermediate activation exists as a dual
+        # tensor (primal + tangent) so peak memory is ~2× a single forward pass.
+        # torch._dynamo cannot trace through GradTrackingTensor — excluded from compilation.
+        return jvp(fn, (z, t_cond), (flow, time_tangent))
+
+    @torch.compiler.disable
+    def _fd_step(self, fn, z, t_cond, flow, time_tangent):
+        # Finite-difference approximation of du/dt along dz/dt = flow.
+        # The perturbed pass runs under no_grad so activations are freed layer-by-layer,
+        # giving ~half the peak memory of _jvp_step at the cost of O(eps) approximation error.
+        # Autocast is disabled for the perturbed pass to prevent bf16 catastrophic cancellation
+        # when subtracting near-equal values; pred_u stays in the caller's AMP dtype.
+        pred_u = fn(z, t_cond)
+        _eps = 1e-3
+        with torch.no_grad(), torch.autocast(device_type="cuda", enabled=False):
+            u_eps = fn((z + _eps * flow).float(), (t_cond + _eps * time_tangent).float())
+        dudt = (u_eps.to(pred_u.dtype) - pred_u.detach()) / _eps
+        return pred_u, dudt
 
     @torch.no_grad()
     def sample_flow(

@@ -135,21 +135,21 @@ class TestEncodeDecode:
 class TestForward:
     def test_output_shapes(self, model):
         x = torch.rand(2, 3, 32, 32)
-        pred_u, target_u = model(x)
+        pred_u, target_u, _ = model(x)
         assert pred_u.shape == (2, _LATENT_C, _LATENT_HW, _LATENT_HW)
         assert target_u.shape == (2, _LATENT_C, _LATENT_HW, _LATENT_HW)
 
-    def test_returns_two_tensors(self, model):
+    def test_returns_three_tensors(self, model):
         x = torch.rand(2, 3, 32, 32)
         out = model(x)
-        assert len(out) == 2
+        assert len(out) == 3
 
     def test_renormalise_maps_input(self, mock_vae):
         """With renormalise=True, [0,1] input is mapped to [-1,1] before encoding."""
         with patch("models.latent_mean_flow.AutoencoderKL.from_pretrained", return_value=mock_vae):
             m = LatentMeanFlowModel(**{**_TINY_KWARGS, "renormalise": True})
         x = torch.rand(2, 3, 32, 32)
-        pred_u, target_u = m(x)
+        pred_u, target_u, _ = m(x)
         assert pred_u.shape == (2, _LATENT_C, _LATENT_HW, _LATENT_HW)
 
 

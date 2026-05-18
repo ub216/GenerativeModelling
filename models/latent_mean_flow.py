@@ -112,12 +112,12 @@ class LatentMeanFlowModel(BaseModel):
         use_sample: bool = True,
         *args,
         **kwargs,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Training forward pass:
         1. Encode image to latent space.
-        2. Run MeanFlow on the latents (returns (pred_u, target_u) via JVP, Eq 6).
-        Returns (pred_u, target_u) both shaped (B, 4, h, w).
+        2. Run MeanFlow on the latents (returns (pred_u, target_u, same_time) via JVP, Eq 6).
+        Returns (pred_u, target_u) both shaped (B, 4, h, w) and same_time bool mask (B,).
         """
         x0 = x.to(self.device)
         if self.renormalise:
