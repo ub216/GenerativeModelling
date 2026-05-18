@@ -131,6 +131,52 @@ class TestMeanFlowIdentity:
 
 
 # ---------------------------------------------------------------------------
+# MeanFlowModel — finite-diff vs JVP accuracy
+# ---------------------------------------------------------------------------
+
+
+class TestFiniteDiff:
+    def test_finite_diff_target_close_to_jvp(self, model, batch):
+        # _fd_step approximates du/dt with O(eps=1e-3) first-order FD; the resulting
+        # target_u should agree with the exact JVP target_u to within ~5% relative error
+        # for a smooth network. Uses fixed time_steps so same_time derivation is identical.
+        torch.manual_seed(42)
+        x1 = torch.randn_like(batch)
+        t = torch.full((batch.shape[0],), 0.8)
+        r = torch.full((batch.shape[0],), 0.2)
+        time_steps = torch.stack([t, r], dim=1)
+
+        model.use_finite_diff = False
+        _, target_jvp, _ = model(batch, time_steps=time_steps, x1=x1)
+
+        model.use_finite_diff = True
+        _, target_fd, _ = model(batch, time_steps=time_steps, x1=x1)
+
+        model.use_finite_diff = False  # restore default
+
+        rel_err = (target_jvp - target_fd).norm() / (target_jvp.norm() + 1e-8)
+        assert rel_err < 0.05, f"finite-diff target_u relative error {rel_err:.4f} exceeds 5%"
+
+    def test_finite_diff_pred_identical_to_jvp(self, model, batch):
+        # pred_u is just fn(z, t_cond) — independent of which du/dt method is used.
+        torch.manual_seed(42)
+        x1 = torch.randn_like(batch)
+        t = torch.full((batch.shape[0],), 0.8)
+        r = torch.full((batch.shape[0],), 0.2)
+        time_steps = torch.stack([t, r], dim=1)
+
+        model.use_finite_diff = False
+        pred_jvp, _, _ = model(batch, time_steps=time_steps, x1=x1)
+
+        model.use_finite_diff = True
+        pred_fd, _, _ = model(batch, time_steps=time_steps, x1=x1)
+
+        model.use_finite_diff = False
+
+        assert torch.allclose(pred_jvp, pred_fd, atol=1e-5), "pred_u should be identical for both methods"
+
+
+# ---------------------------------------------------------------------------
 # MeanFlowModel.forward — time sampling
 # ---------------------------------------------------------------------------
 
