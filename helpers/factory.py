@@ -44,6 +44,8 @@ def get_loss_function(cfg: Dict[str, Any]) -> torch.nn.Module:
         return losses.PairMADLoss(**params)
     elif name == "pair_mse":
         return losses.PairMSELoss(**params)
+    elif name == "mean_flow_mse":
+        return losses.MeanFlowMSELoss(**params)
     elif name == "pair_smooth":
         return losses.PairSmoothLoss(**params)
     elif name == "gan_hinge_loss":
