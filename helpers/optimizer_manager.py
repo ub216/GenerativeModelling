@@ -131,8 +131,12 @@ class OptimizerManager:
         Backward pass with optional gradient scaling.
 
         losses: dict of losses with same keys as optimizers.
+        Keys not present in self.scalers (e.g. monitoring-only sub-losses that don't
+        require grad) are silently skipped.
         """
         for key, val in losses.items():
+            if not val.requires_grad:
+                continue  # monitoring-only loss (no grad), skip backward
             loss = val.mean() / self.accumulate_steps
             if self.scalers[key] is not None:
                 self.scalers[key].scale(loss).backward()

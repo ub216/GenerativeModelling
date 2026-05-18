@@ -120,3 +120,23 @@ def test_step_returns_grad_norm_metrics(simple_model):
     metrics = manager.step()
     assert "grads/all_norm_raw" in metrics
     assert "grads/all_norm_clipped" in metrics
+
+
+def test_backward_skips_no_grad_losses(simple_model):
+    # MeanFlowMSELoss returns monitoring sub-losses (requires_grad=False) alongside the
+    # backprop loss (requires_grad=True). backward() must call .backward() only on the
+    # grad loss and silently skip the monitoring losses — no error, correct gradient.
+    manager = _make_manager(simple_model)
+    x = torch.rand(2, 4)
+    grad_loss = simple_model(x).sum()  # requires_grad=True
+    no_grad_loss = grad_loss.detach()  # requires_grad=False, simulates monitoring sub-loss
+
+    assert grad_loss.requires_grad is True
+    assert no_grad_loss.requires_grad is False
+
+    manager.backward({"all": grad_loss, "monitoring": no_grad_loss})  # must not raise
+
+    # Gradient should be present (from grad_loss) and finite.
+    for p in simple_model.parameters():
+        assert p.grad is not None
+        assert torch.isfinite(p.grad).all()
