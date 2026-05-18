@@ -8,13 +8,18 @@ import helpers.custom_types as custom_types
 
 
 class PairMSELoss(nn.Module):
-    def __init__(self, reduction: custom_types.ReductionType = "mean"):
+    def __init__(
+        self, reduction: custom_types.ReductionType = "mean", adaptive_power: float = 0.5, adaptive_eps: float = 1e-3
+    ):
         super().__init__()
         assert reduction in [
             "sum",
             "mean",
-        ], "Reduction must be 'sum' or 'mean'"
+            "adaptive",
+        ], "Reduction must be 'sum', 'mean' or 'adaptive'"
         self.reduction = reduction
+        self.adaptive_power = adaptive_power
+        self.adaptive_eps = adaptive_eps
 
     def forward(
         self, outputs: Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]], *args, **kwargs
@@ -48,5 +53,9 @@ class PairMSELoss(nn.Module):
 
         if self.reduction == "mean":
             return loss.mean()
+        elif self.reduction == "adaptive":
+            # Adaptive weight w = 1/(loss + eps)^p (stop-gradient) — downweights large residuals
+            # so high-error samples don't dominate gradients (ECT / MeanFlow Appendix B.2).
+            return (loss * (1 / (loss.detach() + self.adaptive_eps) ** self.adaptive_power)).mean()
         else:
             return loss.sum()

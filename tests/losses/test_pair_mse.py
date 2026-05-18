@@ -63,3 +63,43 @@ class TestPairMSELoss:
         loss = fn((x, y, weights))
         # only second sample contributes: MSE=1.0, sum=1.0
         assert torch.isclose(loss, torch.tensor(1.0), atol=1e-6)
+
+
+class TestPairMSEAdaptive:
+    def test_output_is_scalar(self):
+        fn = PairMSELoss(reduction="adaptive")
+        x, y = torch.rand(2, 1, 4, 4), torch.rand(2, 1, 4, 4)
+        assert fn((x, y)).ndim == 0
+
+    def test_zero_when_identical(self):
+        # With identical inputs ||Δ||²=0, weight = 1/eps^p, loss = 0 * weight = 0.
+        fn = PairMSELoss(reduction="adaptive")
+        x = torch.rand(2, 1, 4, 4)
+        assert torch.isclose(fn((x, x)), torch.tensor(0.0), atol=1e-6)
+
+    def test_downweights_large_residuals(self):
+        # A sample with a large error should contribute less than its raw MSE would suggest.
+        # Compare: adaptive(large_error) / adaptive(small_error) < raw_mse(large) / raw_mse(small).
+        fn_adaptive = PairMSELoss(reduction="adaptive")
+        fn_mean = PairMSELoss(reduction="mean")
+        small_err = (torch.zeros(1, 1, 4, 4), torch.ones(1, 1, 4, 4) * 0.1)
+        large_err = (torch.zeros(1, 1, 4, 4), torch.ones(1, 1, 4, 4) * 10.0)
+        ratio_adaptive = fn_adaptive(large_err) / fn_adaptive(small_err)
+        ratio_raw = fn_mean(large_err) / fn_mean(small_err)
+        assert ratio_adaptive < ratio_raw
+
+    def test_eps_prevents_division_by_zero(self):
+        # Identical inputs → ||Δ||²=0; should not produce NaN or Inf with default eps.
+        fn = PairMSELoss(reduction="adaptive")
+        x = torch.zeros(2, 1, 4, 4)
+        loss = fn((x, x))
+        assert not torch.isnan(loss) and not torch.isinf(loss)
+
+    def test_adaptive_less_than_mean_for_large_errors(self):
+        # Adaptive loss is strictly less than plain mean MSE when errors are large
+        # (the downweighting shrinks the effective contribution).
+        fn_adaptive = PairMSELoss(reduction="adaptive")
+        fn_mean = PairMSELoss(reduction="mean")
+        x = torch.zeros(2, 1, 4, 4)
+        y = torch.ones(2, 1, 4, 4) * 10.0
+        assert fn_adaptive((x, y)) < fn_mean((x, y))
