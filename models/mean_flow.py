@@ -220,24 +220,35 @@ class MeanFlowModel(FlowModel):
                 else None
             )
 
+            # same_time_ratio==1 means the model was trained only on boundary conditions
+            # (r=t, Δt=0), so it only knows instantaneous velocity — query with Δt=0.
+            # Otherwise use test_delta so the network predicts mean velocity over each step.
+            sample_delta = 0.0 if self.same_time_ratio == 1.0 else self.test_delta
+
             for t in range(self.test_timesteps, 0, -1):  # t is T, T-1, ..., 1
+                t_val = t / self.test_timesteps
                 vec_t = torch.stack(
                     [
-                        torch.full((cur_bs,), t / self.test_timesteps, device=device),
-                        torch.full((cur_bs,), self.test_delta, device=device),
+                        torch.full((cur_bs,), t_val, device=device),
+                        torch.full((cur_bs,), sample_delta, device=device),
                     ],
                     dim=1,
-                )  # (B, 2) with start time step and delta time
+                )  # (B, 2): current time and Δt
 
                 u_pred, _ = self.unet(x_t, vec_t, text_emb=text_emb_cache)
 
-                pred_x0 = x_t - self.test_delta * u_pred
+                # pred_x0 = z_t - t*v(z_t,t): the predicted clean image, not the next ODE state.
+                # Dynamic thresholding must operate on the full x0 estimate; using test_delta
+                # (step size) instead of t_val would threshold the tiny next-step increment,
+                # compressing noise-scale states and corrupting all subsequent steps.
+                pred_x0 = x_t - t_val * u_pred
                 if dynamic_threshold:
                     pred_x0 = self._dynamic_threshold(pred_x0, c=threshold_coeff)
                 else:
                     pred_x0 = pred_x0.clamp(-threshold_coeff, threshold_coeff)
 
-                x_t = pred_x0
+                # Back out corrected velocity from thresholded x0 and take a small Euler step
+                x_t = x_t - self.test_delta * ((x_t - pred_x0) / t_val)
 
             samples.append(x_t)
 
