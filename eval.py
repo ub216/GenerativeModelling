@@ -73,16 +73,18 @@ def eval(
         save_dir=save_dir,
         dataloader=dataloader,
     )
+    scores = []
     for metric in compute_metrics:
-        if isinstance(metric, metrics.FIDInception):
+        if isinstance(metric, metrics.ImageDistributionMetric):
             sampler_loader = model.wrap_sampler_to_loader(
                 num_samples=metric.samples,
                 device=device,
                 image_size=dataloader.image_size,
                 batch_size=dataloader.batch_size,
             )
-            curr_score = metric(dataloader, sampler_loader)
-            logger.info(f"Final FID: {curr_score:.4f}")
+            score = metric(dataloader, sampler_loader)
+            scores.append(f"{metric.name}: {score:.4f}")
+    logger.info(f"Final Metrics: {', '.join(scores)}")
 
 
 # -----------------------------

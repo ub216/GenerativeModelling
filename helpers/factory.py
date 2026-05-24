@@ -132,6 +132,8 @@ def get_metrics(cfg: Dict[str, Any]) -> List[torch.nn.Module]:
         logger.info(f"Metric params: {params}")
         if name == "fid":
             metric.append(metrics.FIDInception(**params))
+        elif name == "cmmd":
+            metric.append(metrics.CMMDClip(**params))
         else:
             raise ValueError(f"Unknown metric: {name}")
     return metric

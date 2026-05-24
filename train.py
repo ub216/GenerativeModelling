@@ -199,22 +199,27 @@ def train(
         # Generate evaluation samples/metrics
         if metric_interval is not None and ((epoch + 1) % metric_interval == 0 or epoch + 1 == epochs):
 
-            curr_score = prev_best_score
+            curr_score = None
+            description = ""
             for metric in compute_metrics:
-                # FID is computed on unconditioned input only
-                if isinstance(metric, metrics.FIDInception):
+                # metrics are computed on unconditioned input only
+                if isinstance(metric, metrics.ImageDistributionMetric):
                     sampler_loader = model.wrap_sampler_to_loader(
                         num_samples=metric.samples,
                         device=device,
                         image_size=dataloader.image_size,
                         batch_size=dataloader.batch_size,
                     )
-                    curr_score = metric(dataloader, sampler_loader)
-                    wandb.log({"FID": curr_score}, step=(epoch + 1) * len(dataloader))
-                    logger.info(f"Epoch {epoch+1} FID: {curr_score:.4f}")
+                    score = metric(dataloader, sampler_loader)
+                    wandb.log({metric.name: score}, step=(epoch + 1) * len(dataloader))
+                    description += f", {metric.name}: {score:.4f}"
+                    if metric.primary_metric:
+                        curr_score = score
+
+            logger.info(f"Epoch {epoch+1}: {description}")
 
             # Save best and last model
-            if curr_score <= prev_best_score or epoch + 1 == epochs:
+            if curr_score is not None and (curr_score <= prev_best_score or epoch + 1 == epochs):
                 prev_best_score = curr_score
                 checkpoint = {
                     "epoch": epoch,
@@ -222,7 +227,7 @@ def train(
                     "model_ema_state_dict": model_ema.state_dict(),
                     "optimizer_state_dict": optimizer_manager.state_dict(),
                     "loss": epoch_loss,
-                    "fid": curr_score,
+                    "primary_score": curr_score,
                 }
                 torch.save(checkpoint, f"{save_dir}/best_{epoch+1}.pth")
         if epoch % save_after_epoch == 0:
