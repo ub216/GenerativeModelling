@@ -5,7 +5,6 @@ experiment:
 model:
   type: "latent_mean_flow"
   params:
-    timesteps: 1000
     test_timesteps: 1                  # one-step generation (arXiv:2505.13447)
     base_channels: 128
     channel_mults: [1, 2, 4]
@@ -22,7 +21,8 @@ model:
     logit_mu: -0.4                     # logit-normal μ for time sampling
     drop_condition_ratio: 0.1          # 10% unconditional training (Sec 4.2)
     sample_condition_weight: 1.0       # ω = 1.0 (ImageNet B/2 Table 4)
-  checkpoint: null
+  checkpoint: ""
+  checkpoint_weights_only: true
 
 optimizer:
   type: "adamw"
@@ -41,6 +41,7 @@ training:
   save_after_epoch: 10
   amp_dtype: "auto"                    # "auto" | "bfloat16" | "float16" | "disabled"
   sample_interval: 1                   # generate sample images every N epochs
+  num_fixed_samples: 3                 # first N validation samples use a fixed seed for cross-epoch comparison
   compile: true                        # torch.compile for kernel fusion (~20-30% speedup after warmup)
 
 evaluation:
@@ -57,9 +58,10 @@ dataset:
     attr_target: "smiling"
 
 loss:
-  type: "pair_mad"                     # L1 loss; outperforms MSE for MeanFlow per paper ablation
+  type: "pair_mse"                     # adaptive MSE: w=1/(||Δ||²+eps)^p downweights large residuals (ECT / MeanFlow B.2)
   params:
-    reduction: "mean"
+    reduction: "adaptive"
+    adaptive_power: 0.5                # p=0.5 matches ECT (arXiv:2406.14548); equivalent to Pseudo-Huber
 
 metrics:
   fid:

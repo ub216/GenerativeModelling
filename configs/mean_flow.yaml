@@ -4,7 +4,6 @@ experiment:
 model:
   type: "mean_flow"
   params:
-    timesteps: 1000
     test_timesteps: 1                  # MeanFlow enables one-step generation (arXiv:2505.13447)
     # Time sampler: logit-normal lognorm(-0.4, 1.0) — ImageNet B/2 Table 4
     logit_mu: -0.4
@@ -31,6 +30,7 @@ training:
   metric_interval: 5
   amp_dtype: "auto"                    # "auto" | "bfloat16" | "float16" | "disabled"
   sample_interval: 1                   # generate sample images every N epochs
+  num_fixed_samples: 3                 # first N validation samples use a fixed seed for cross-epoch comparison
 
 evaluation:
   samples: 100
@@ -44,9 +44,10 @@ dataset:
     persistent_workers: true
 
 loss:
-  type: "pair_mad"                   # L1 loss; outperforms MSE for MeanFlow per paper ablation
+  type: "pair_mse"                   # adaptive MSE: w=1/(||Δ||²+eps)^p downweights large residuals (ECT / MeanFlow B.2)
   params:
-    reduction: "mean"
+    reduction: "adaptive"
+    adaptive_power: 0.5              # p=0.5 matches ECT (arXiv:2406.14548); equivalent to Pseudo-Huber
 
 metrics:
   fid:

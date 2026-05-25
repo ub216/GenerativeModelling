@@ -22,9 +22,8 @@ class MeanFlowModel(FlowModel):
         channel_mults: List[int] = (1, 2, 4),
         num_blocks: int | List[int] = [1, 2, 2],
         time_emb_dim: int = 128,
-        timesteps: int = 1000,
         device: custom_types.DeviceType = "cuda",
-        test_timesteps: Optional[int] = None,
+        test_timesteps: int = 1,  # one-step generation (arXiv:2505.13447)
         text_emb_dim: Optional[int] = None,
         drop_condition_ratio: float = 0.1,  # paper Sec 4.2: 10% unconditional training
         sample_condition_weight: float = 1.0,  # ω in Eq 21; effective scale ω'=ω/(1-κ)=2.0 (ImageNet B/2 Table 4)
@@ -43,7 +42,6 @@ class MeanFlowModel(FlowModel):
             num_blocks=num_blocks,
             time_emb_dim=time_emb_dim,
             text_emb_dim=text_emb_dim,
-            timesteps=timesteps,
             device=device,
             test_timesteps=test_timesteps,
             drop_condition_ratio=drop_condition_ratio,

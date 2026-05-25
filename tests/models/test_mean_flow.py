@@ -11,7 +11,6 @@ _KWARGS = dict(
     channel_mults=[1, 2],
     num_blocks=[1, 1],
     time_emb_dim=16,
-    timesteps=10,
     test_timesteps=4,
     device=DEVICE,
 )

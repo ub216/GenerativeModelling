@@ -21,7 +21,6 @@ _TINY_KWARGS = dict(
     channel_mults=[1, 2],
     num_blocks=[1, 1],
     time_emb_dim=16,
-    timesteps=10,
     test_timesteps=4,
     device="cpu",
     compile_vae=False,
@@ -68,9 +67,6 @@ def model(mock_vae):
 class TestInit:
     def test_scaling_factor_set(self, model):
         assert model.scaling_factor == pytest.approx(0.18215)
-
-    def test_timesteps_property(self, model):
-        assert model.timesteps == _TINY_KWARGS["timesteps"]
 
     def test_vae_put_in_eval_mode(self, mock_vae):
         with patch("models.latent_vae_base.AutoencoderKL.from_pretrained", return_value=mock_vae):

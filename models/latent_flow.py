@@ -17,8 +17,7 @@ class LatentFlowModel(LatentVAEBase):
         num_blocks: List[int] = [1, 2, 2],
         time_emb_dim: int = 128,
         text_emb_dim: Optional[int] = None,
-        timesteps: int = 1000,
-        test_timesteps: Optional[int] = None,
+        test_timesteps: int = 200,
         drop_condition_ratio: float = 0.25,
         sample_condition_weight: int = 10,
         use_attention: bool = False,
@@ -45,7 +44,6 @@ class LatentFlowModel(LatentVAEBase):
             num_blocks=num_blocks,
             time_emb_dim=time_emb_dim,
             text_emb_dim=text_emb_dim,
-            timesteps=timesteps,
             test_timesteps=test_timesteps,
             drop_condition_ratio=drop_condition_ratio,
             sample_condition_weight=sample_condition_weight,
@@ -86,10 +84,6 @@ class LatentFlowModel(LatentVAEBase):
     @property
     def unet(self):
         return self.model.unet
-
-    @property
-    def timesteps(self):
-        return self.model.timesteps
 
     @torch.no_grad()
     def sample(

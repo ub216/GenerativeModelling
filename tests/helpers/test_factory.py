@@ -22,6 +22,15 @@ _DIFFUSION_PARAMS = dict(
     device="cpu",
 )
 
+_FLOW_PARAMS = dict(
+    base_channels=8,
+    channel_mults=[1, 2],
+    num_blocks=[1, 1],
+    time_emb_dim=16,
+    test_timesteps=10,
+    device="cpu",
+)
+
 _VAE_PARAMS = dict(
     feature_dims=[4, 8],
     latent_dim=4,
@@ -83,7 +92,7 @@ class TestGetModel:
         assert isinstance(ema, EMAModel)
 
     def test_flow_returns_flow_model(self):
-        cfg = {"type": "flow", "params": _DIFFUSION_PARAMS.copy()}
+        cfg = {"type": "flow", "params": _FLOW_PARAMS.copy()}
         model, ema = get_model(cfg, image_size=_IMG_SIZE_1CH)
         assert isinstance(model, FlowModel)
 

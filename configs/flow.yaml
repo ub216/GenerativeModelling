@@ -4,7 +4,6 @@ experiment:
 model:
   type: "flow"                       # options: vae, diffusion, flow, etc.
   params:
-    timesteps: 1000
     test_timesteps: 200
     text_emb_dim: 128                # Set to null if CFG not required
     sample_condition_weight: 10

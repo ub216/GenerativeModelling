@@ -21,9 +21,8 @@ class FlowModel(BaseModel):
         channel_mults: List[int] = (1, 2, 4),
         num_blocks: int | List[int] = [1, 2, 2],
         time_emb_dim: int = 128,
-        timesteps: int = 1000,
         device: custom_types.DeviceType = "cuda",
-        test_timesteps: Optional[int] = None,
+        test_timesteps: int = 200,
         text_emb_dim: Optional[int] = None,
         drop_condition_ratio: float = 0.25,
         sample_condition_weight: int = 10,
@@ -42,8 +41,7 @@ class FlowModel(BaseModel):
             use_attention=use_attention,
         )
         self.in_channels = in_channels
-        self.timesteps = timesteps
-        self.test_timesteps = test_timesteps if test_timesteps is not None else timesteps
+        self.test_timesteps = test_timesteps
         self.test_delta = 1 / self.test_timesteps
         self.text_emb_dim = text_emb_dim
         self.drop_condition_ratio = drop_condition_ratio

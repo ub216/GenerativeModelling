@@ -17,7 +17,6 @@ class LatentMeanFlowModel(LatentVAEBase):
         num_blocks: List[int] = [1, 2, 2],
         time_emb_dim: int = 128,
         text_emb_dim: Optional[int] = None,
-        timesteps: int = 1000,
         test_timesteps: int = 1,  # one-step generation (arXiv:2505.13447)
         drop_condition_ratio: float = 0.1,  # paper Sec 4.2
         sample_condition_weight: float = 1.0,  # ω=1.0 (ImageNet B/2 Table 4)
@@ -50,7 +49,6 @@ class LatentMeanFlowModel(LatentVAEBase):
             num_blocks=num_blocks,
             time_emb_dim=time_emb_dim,
             text_emb_dim=text_emb_dim,
-            timesteps=timesteps,
             test_timesteps=test_timesteps,
             drop_condition_ratio=drop_condition_ratio,
             sample_condition_weight=sample_condition_weight,
@@ -95,10 +93,6 @@ class LatentMeanFlowModel(LatentVAEBase):
     @property
     def unet(self):
         return self.model.unet
-
-    @property
-    def timesteps(self):
-        return self.model.timesteps
 
     @torch.no_grad()
     def sample(

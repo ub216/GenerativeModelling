@@ -5,7 +5,6 @@ experiment:
 model:
   type: "latent_flow"
   params:
-    timesteps: 1000
     test_timesteps: 200               # Flow ODEs converge in fewer steps than diffusion
     base_channels: 128
     channel_mults: [1, 2, 4]
