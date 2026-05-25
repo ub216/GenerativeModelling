@@ -1,3 +1,4 @@
+import inspect
 from typing import Any, Dict, List, Tuple
 
 import torch
@@ -9,6 +10,38 @@ import losses
 import metrics
 import models
 from helpers.optimizer_manager import OptimizerManager
+
+
+def _prepare_params(cls: type, user_param_keys: set, all_params: dict) -> dict:
+    """
+    Validate user-provided config keys against cls.__init__ and return a filtered
+    params dict safe to unpack into cls(**...).
+
+    For constructors without **kwargs (leaf models):
+      - Raises ValueError listing any user key absent from the constructor's signature.
+      - Returns all_params filtered to only accepted keys, silently dropping
+        factory-injected keys (e.g. image_size, in_channels) the constructor does not need.
+
+    For constructors with **kwargs (intermediate/wrapper models):
+      - Returns all_params unchanged; leaf constructor validation will surface unknown
+        keys when forwarded kwargs reach a strict leaf.
+    """
+    sig = inspect.signature(cls.__init__)
+    has_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+    if has_var_keyword:
+        return all_params
+
+    accepted = {
+        name
+        for name, p in sig.parameters.items()
+        if name != "self" and p.kind not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+    }
+    unknown = user_param_keys - accepted
+    if unknown:
+        raise ValueError(
+            f"Unrecognised config parameters for {cls.__name__}: {sorted(unknown)}. " f"Accepted: {sorted(accepted)}"
+        )
+    return {k: v for k, v in all_params.items() if k in accepted}
 
 
 def get_dataset(cfg: Dict[str, Any], batch_size=None) -> torch.utils.data.DataLoader:
@@ -38,18 +71,19 @@ def get_loss_function(cfg: Dict[str, Any]) -> torch.nn.Module:
     name = cfg["type"].lower()
     params = cfg.get("params", {})
     logger.info(f"Loss params: {params}")
+    user_param_keys = set(params.keys())
     if name == "vae":
-        return losses.VAELoss(**params)
+        return losses.VAELoss(**_prepare_params(losses.VAELoss, user_param_keys, params))
     elif name == "pair_mad":
-        return losses.PairMADLoss(**params)
+        return losses.PairMADLoss(**_prepare_params(losses.PairMADLoss, user_param_keys, params))
     elif name == "pair_mse":
-        return losses.PairMSELoss(**params)
+        return losses.PairMSELoss(**_prepare_params(losses.PairMSELoss, user_param_keys, params))
     elif name == "mean_flow_mse":
-        return losses.MeanFlowMSELoss(**params)
+        return losses.MeanFlowMSELoss(**_prepare_params(losses.MeanFlowMSELoss, user_param_keys, params))
     elif name == "pair_smooth":
-        return losses.PairSmoothLoss(**params)
+        return losses.PairSmoothLoss(**_prepare_params(losses.PairSmoothLoss, user_param_keys, params))
     elif name == "gan_hinge_loss":
-        return losses.GANHingeLoss(**params)
+        return losses.GANHingeLoss(**_prepare_params(losses.GANHingeLoss, user_param_keys, params))
     else:
         raise ValueError(f"Unknown loss function: {name}")
 
@@ -70,6 +104,9 @@ def get_model(
         raise ValueError("Either image_size or dataloader must be provided to infer image size.")
     name = cfg["type"].lower()
     params = cfg.get("params", {})
+    # Capture keys the user explicitly set before factory injects image_size / in_channels.
+    # _prepare_params uses this to distinguish user typos from factory-injected fields.
+    user_param_keys = set(params.keys())
 
     # Compare image_size given in cfg and loaded from dataloader
     # We only consdier square images
@@ -85,37 +122,54 @@ def get_model(
     logger.info(f"Model params: {params}")
     if name == "vae":
         assert h == w, "VAE implementation can only handle square images for now"
-        return models.VAE(**params), (models.EMAModel(models.VAE(**params), decay=ema_decay) if build_ema else None)
+        vae_params = _prepare_params(models.VAE, user_param_keys, params)
+        return models.VAE(**vae_params), (
+            models.EMAModel(models.VAE(**vae_params), decay=ema_decay) if build_ema else None
+        )
     if name == "gan":
         assert h == w, "GAN implementation can only handle square images for now"
-        return models.GAN(**params), (models.EMAModel(models.GAN(**params), decay=ema_decay) if build_ema else None)
+        gan_params = _prepare_params(models.GAN, user_param_keys, params)
+        return models.GAN(**gan_params), (
+            models.EMAModel(models.GAN(**gan_params), decay=ema_decay) if build_ema else None
+        )
     elif name == "diffusion":
-        return models.DiffusionModel(**params), (
-            models.EMAModel(models.DiffusionModel(**params), decay=ema_decay) if build_ema else None
+        diffusion_params = _prepare_params(models.DiffusionModel, user_param_keys, params)
+        return models.DiffusionModel(**diffusion_params), (
+            models.EMAModel(models.DiffusionModel(**diffusion_params), decay=ema_decay) if build_ema else None
         )
     elif name == "flow":
-        return models.FlowModel(**params), (
-            models.EMAModel(models.FlowModel(**params), decay=ema_decay) if build_ema else None
+        flow_params = _prepare_params(models.FlowModel, user_param_keys, params)
+        return models.FlowModel(**flow_params), (
+            models.EMAModel(models.FlowModel(**flow_params), decay=ema_decay) if build_ema else None
         )
     elif name == "latent_diffusion":
-        return models.LatentDiffusionModel(**params), (
-            models.EMAModel(models.LatentDiffusionModel(**params), decay=ema_decay) if build_ema else None
+        latent_diffusion_params = _prepare_params(models.LatentDiffusionModel, user_param_keys, params)
+        return models.LatentDiffusionModel(**latent_diffusion_params), (
+            models.EMAModel(models.LatentDiffusionModel(**latent_diffusion_params), decay=ema_decay)
+            if build_ema
+            else None
         )
     elif name == "dpo_latent_diffusion":
-        return models.DPOLatentDiffusionModel(**params), (
-            models.EMAModel(models.DPOLatentDiffusionModel(**params), decay=ema_decay) if build_ema else None
+        dpo_params = _prepare_params(models.DPOLatentDiffusionModel, user_param_keys, params)
+        return models.DPOLatentDiffusionModel(**dpo_params), (
+            models.EMAModel(models.DPOLatentDiffusionModel(**dpo_params), decay=ema_decay) if build_ema else None
         )
     elif name == "latent_flow":
-        return models.LatentFlowModel(**params), (
-            models.EMAModel(models.LatentFlowModel(**params), decay=ema_decay) if build_ema else None
+        latent_flow_params = _prepare_params(models.LatentFlowModel, user_param_keys, params)
+        return models.LatentFlowModel(**latent_flow_params), (
+            models.EMAModel(models.LatentFlowModel(**latent_flow_params), decay=ema_decay) if build_ema else None
         )
     elif name == "latent_mean_flow":
-        return models.LatentMeanFlowModel(**params), (
-            models.EMAModel(models.LatentMeanFlowModel(**params), decay=ema_decay) if build_ema else None
+        latent_mean_flow_params = _prepare_params(models.LatentMeanFlowModel, user_param_keys, params)
+        return models.LatentMeanFlowModel(**latent_mean_flow_params), (
+            models.EMAModel(models.LatentMeanFlowModel(**latent_mean_flow_params), decay=ema_decay)
+            if build_ema
+            else None
         )
     elif name == "mean_flow":
-        return models.MeanFlowModel(**params), (
-            models.EMAModel(models.MeanFlowModel(**params), decay=ema_decay) if build_ema else None
+        mean_flow_params = _prepare_params(models.MeanFlowModel, user_param_keys, params)
+        return models.MeanFlowModel(**mean_flow_params), (
+            models.EMAModel(models.MeanFlowModel(**mean_flow_params), decay=ema_decay) if build_ema else None
         )
     else:
         raise ValueError(f"Unknown model type: {name}")
@@ -128,12 +182,13 @@ def get_metrics(cfg: Dict[str, Any]) -> List[torch.nn.Module]:
     for name, key in cfg.items():
         name = name.lower()
         params = key.get("params", {})
+        user_param_keys = set(params.keys())
 
         logger.info(f"Metric params: {params}")
         if name == "fid":
-            metric.append(metrics.FIDInception(**params))
+            metric.append(metrics.FIDInception(**_prepare_params(metrics.FIDInception, user_param_keys, params)))
         elif name == "cmmd":
-            metric.append(metrics.CMMDClip(**params))
+            metric.append(metrics.CMMDClip(**_prepare_params(metrics.CMMDClip, user_param_keys, params)))
         else:
             raise ValueError(f"Unknown metric: {name}")
     return metric

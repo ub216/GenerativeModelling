@@ -22,8 +22,6 @@ class GAN(BaseModel):
         hidden_dim: int = 128,
         dropout: float = 0.5,
         device: custom_types.DeviceType = "cuda",
-        *args,
-        **kwargs,
     ):
         """
         GAN can only handle square images for now

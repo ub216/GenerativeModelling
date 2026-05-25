@@ -29,8 +29,6 @@ class FlowModel(BaseModel):
         sample_condition_weight: int = 10,
         renormalize: bool = False,
         use_attention: bool = False,
-        *args,
-        **kwargs,
     ):
         super().__init__()
         self.unet = UNet(

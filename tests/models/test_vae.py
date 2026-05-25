@@ -24,6 +24,17 @@ def batch():
 
 
 # ---------------------------------------------------------------------------
+# VAE constructor — unknown param rejection
+# ---------------------------------------------------------------------------
+
+
+class TestVAEConstructor:
+    def test_unknown_kwarg_raises_type_error(self):
+        with pytest.raises(TypeError):
+            VAE(**_KWARGS, typo_param=True)
+
+
+# ---------------------------------------------------------------------------
 # VAE.forward
 # ---------------------------------------------------------------------------
 

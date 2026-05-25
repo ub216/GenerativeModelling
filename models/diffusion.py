@@ -32,8 +32,6 @@ class DiffusionModel(BaseModel):
         schedule_type: str = "cosine",  # linear or cosine
         use_attention: bool = False,
         use_snr_weighting: bool = True,
-        *args,
-        **kwargs,
     ):
         super().__init__()
         self.unet = UNet(

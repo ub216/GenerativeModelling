@@ -35,8 +35,6 @@ class MeanFlowModel(FlowModel):
         logit_sigma: float = 1.0,  # logit-normal σ; ImageNet B/2: lognorm(-0.4, 1.0) (Table 4)
         logit_mu: float = -0.4,  # logit-normal μ; concentrates mass away from t=0 boundary
         use_finite_diff: bool = False,  # if True, estimate du/dt via finite differences (~half peak memory vs JVP)
-        *args,
-        **kwargs,
     ):
         super().__init__(
             in_channels=in_channels,
@@ -52,8 +50,6 @@ class MeanFlowModel(FlowModel):
             sample_condition_weight=sample_condition_weight,
             renormalize=renormalize,
             use_attention=use_attention,
-            *args,
-            **kwargs,
         )
         # Replace the single-time UNet created by FlowModel with a dual-time one for MeanFlow
         self.unet = UNet(

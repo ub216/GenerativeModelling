@@ -59,6 +59,10 @@ class TestGetLossFunction:
         with pytest.raises(ValueError):
             get_loss_function({"type": "not_a_loss"})
 
+    def test_unrecognised_param_raises_value_error(self):
+        with pytest.raises(ValueError, match="Unrecognised config parameters for VAELoss"):
+            get_loss_function({"type": "vae", "params": {"typo_param": 1.0}})
+
 
 # ---------------------------------------------------------------------------
 # get_model
@@ -109,6 +113,23 @@ class TestGetModel:
         model, _ = get_model(cfg, image_size=_IMG_SIZE_1CH)
         # get_model overrides in_channels to match the dataloader/image_size
         assert model.in_channels == 1
+
+    def test_unrecognised_param_raises_value_error(self):
+        cfg = {"type": "diffusion", "params": {**_DIFFUSION_PARAMS, "typo_param": True}}
+        with pytest.raises(ValueError, match="Unrecognised config parameters for DiffusionModel"):
+            get_model(cfg, image_size=_IMG_SIZE_1CH)
+
+    def test_factory_injected_image_size_not_flagged_for_models_without_it(self):
+        # image_size is injected by the factory for all models; models that don't accept it
+        # (e.g. DiffusionModel) should receive it silently filtered out, not as a ValueError.
+        cfg = {"type": "diffusion", "params": _DIFFUSION_PARAMS.copy()}
+        model, _ = get_model(cfg, image_size=_IMG_SIZE_1CH)
+        assert isinstance(model, DiffusionModel)
+
+    def test_unrecognised_param_vae_raises_value_error(self):
+        cfg = {"type": "vae", "params": {**_VAE_PARAMS, "bad_key": 999}}
+        with pytest.raises(ValueError, match="Unrecognised config parameters for VAE"):
+            get_model(cfg, image_size=_IMG_SIZE_1CH)
 
 
 # ---------------------------------------------------------------------------
