@@ -59,7 +59,7 @@ def mock_vae():
 
 @pytest.fixture
 def model(mock_vae):
-    with patch("models.latent_diffusion.AutoencoderKL.from_pretrained", return_value=mock_vae):
+    with patch("models.latent_vae_base.AutoencoderKL.from_pretrained", return_value=mock_vae):
         m = LatentDiffusionModel(**_TINY_KWARGS)
     return m
 
@@ -78,7 +78,7 @@ class TestInit:
 
     def test_vae_put_in_eval_mode(self, mock_vae):
         with patch(
-            "models.latent_diffusion.AutoencoderKL.from_pretrained",
+            "models.latent_vae_base.AutoencoderKL.from_pretrained",
             return_value=mock_vae,
         ):
             LatentDiffusionModel(**_TINY_KWARGS)
@@ -139,7 +139,7 @@ class TestForward:
     def test_renormalise_maps_input(self, mock_vae):
         """With renormalise=True, input [0,1] is mapped to [-1,1] before encoding."""
         with patch(
-            "models.latent_diffusion.AutoencoderKL.from_pretrained",
+            "models.latent_vae_base.AutoencoderKL.from_pretrained",
             return_value=mock_vae,
         ):
             m = LatentDiffusionModel(**{**_TINY_KWARGS, "renormalise": True})

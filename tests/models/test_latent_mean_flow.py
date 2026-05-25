@@ -55,7 +55,7 @@ def mock_vae():
 
 @pytest.fixture
 def model(mock_vae):
-    with patch("models.latent_mean_flow.AutoencoderKL.from_pretrained", return_value=mock_vae):
+    with patch("models.latent_vae_base.AutoencoderKL.from_pretrained", return_value=mock_vae):
         m = LatentMeanFlowModel(**_TINY_KWARGS)
     return m
 
@@ -73,7 +73,7 @@ class TestInit:
         assert model.timesteps == _TINY_KWARGS["timesteps"]
 
     def test_vae_put_in_eval_mode(self, mock_vae):
-        with patch("models.latent_mean_flow.AutoencoderKL.from_pretrained", return_value=mock_vae):
+        with patch("models.latent_vae_base.AutoencoderKL.from_pretrained", return_value=mock_vae):
             LatentMeanFlowModel(**_TINY_KWARGS)
         mock_vae.eval.assert_called()
 
@@ -146,7 +146,7 @@ class TestForward:
 
     def test_renormalise_maps_input(self, mock_vae):
         """With renormalise=True, [0,1] input is mapped to [-1,1] before encoding."""
-        with patch("models.latent_mean_flow.AutoencoderKL.from_pretrained", return_value=mock_vae):
+        with patch("models.latent_vae_base.AutoencoderKL.from_pretrained", return_value=mock_vae):
             m = LatentMeanFlowModel(**{**_TINY_KWARGS, "renormalise": True})
         x = torch.rand(2, 3, 32, 32)
         pred_u, target_u, _ = m(x)

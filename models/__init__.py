@@ -6,5 +6,6 @@ from models.gan import GAN  # noqa: F401
 from models.latent_diffusion import LatentDiffusionModel  # noqa: F401
 from models.latent_flow import LatentFlowModel  # noqa: F401
 from models.latent_mean_flow import LatentMeanFlowModel  # noqa: F401
+from models.latent_vae_base import LatentVAEBase  # noqa: F401
 from models.mean_flow import MeanFlowModel  # noqa: F401
 from models.vae import VAE  # noqa: F401

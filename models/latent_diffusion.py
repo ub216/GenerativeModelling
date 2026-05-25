@@ -2,16 +2,15 @@ from typing import List, Optional, Tuple
 
 import torch
 import torchvision.transforms as T
-from diffusers import AutoencoderKL
 from loguru import logger
 from matplotlib import pyplot as plt
 from PIL import Image
 
-from models.base_model import BaseModel
 from models.diffusion import DiffusionModel
+from models.latent_vae_base import LatentVAEBase
 
 
-class LatentDiffusionModel(BaseModel):
+class LatentDiffusionModel(LatentVAEBase):
     def __init__(
         self,
         # Diffusion specific params
@@ -31,27 +30,7 @@ class LatentDiffusionModel(BaseModel):
         *args,
         **kwargs,
     ):
-        super().__init__()
-        self.device = device
-
-        # load the Pre-trained VAE
-        self.vae = AutoencoderKL.from_pretrained(vae_model_name, local_files_only=True).to(device)
-        self.renormalise = renormalise
-
-        # Freeze VAE - we only train the Diffusion backbone
-        self.vae.eval()
-        for param in self.vae.parameters():
-            param.requires_grad = False
-
-        if compile_vae:
-            try:
-                self.vae.encoder = torch.compile(self.vae.encoder, mode="reduce-overhead")
-                logger.info("VAE Encoder compiled successfully using torch.compile")
-            except Exception as e:
-                logger.warning(f"Failed to compile VAE: {e}. Falling back to eager mode.")
-
-        # The VAE scaling factor is crucial for training stability
-        self.scaling_factor = self.vae.config.scaling_factor
+        super().__init__(renormalise=renormalise, vae_model_name=vae_model_name, device=device, compile_vae=compile_vae)
 
         # initialize diffusionModel backbone
         # Note: in_channels is ALWAYS 4 for this VAE (latent channels)
@@ -73,24 +52,6 @@ class LatentDiffusionModel(BaseModel):
         )
         self.sample_condition_weight = self.model.sample_condition_weight
         self.has_conditional_generation = self.model.has_conditional_generation
-
-    def encode(self, x: torch.Tensor, use_sample=True) -> torch.Tensor:
-        """Pixels (B, 3, H, W) -> Latents (B, 4, H/8, W/8)"""
-        # x should be in range [-1, 1]
-        with torch.no_grad():
-            posterior = self.vae.encode(x).latent_dist
-            if use_sample:
-                latents = posterior.sample() * self.scaling_factor
-            else:
-                latents = posterior.mode() * self.scaling_factor
-        return latents
-
-    def decode(self, z: torch.Tensor) -> torch.Tensor:
-        """Latents (B, 4, h, w) -> Pixels (B, 3, H, W)"""
-        # with torch.no_grad():
-        z = z / self.scaling_factor
-        images = self.vae.decode(z).sample
-        return images
 
     def forward(
         self,
@@ -173,26 +134,9 @@ class LatentDiffusionModel(BaseModel):
                 f"Generated latents absolute distribution: min {latents.abs().min()}, max {latents.abs().max()}"
             )
 
-        # decode Latents to Pixels
-        # We must process this in batches to avoid OOM on the VAE decoder
-        all_images = []
-        for i in range(0, latents.shape[0], batch_size):
-            batch_latents = latents[i : i + batch_size].to(device)
-
-            # Decode to pixels
-            # decoded.sample is in range [-1, 1]
-            decoded = self.decode(batch_latents)
-            all_images.append(decoded)
-
-        samples = torch.cat(all_images, dim=0)
-
-        # final Post-processing
-        # Map from [-1, 1] (VAE output) to [0, 1] for visualization
-        if self.renormalise:
-            samples = (samples + 1.0) / 2.0
-
+        samples = self._decode_latents_to_pixels(latents, batch_size, device)
         self.model.train()
-        return samples.clamp(0.0, 1.0)
+        return samples
 
 
 def test_vae_reconstruction(
