@@ -107,6 +107,8 @@ def eval_sample(
     save_dir: str = "./",
     dataloader: Optional[torch.utils.data.DataLoader] = None,
     is_ema: bool = True,
+    num_fixed_samples: int = 0,
+    fixed_seed: int = 42,
 ) -> torch.Tensor:
     model.eval()
     conditioning = None
@@ -121,16 +123,31 @@ def eval_sample(
             conditioning = (
                 drop_condition(conditioning, 0.25) if sum([c == "" for c in conditioning]) == 0 else conditioning
             )
-            samples = model.sample(
-                num_samples,
-                device,
-                image_size,
-                batch_size=num_samples,
-                conditioning=conditioning,
-            )
+
+        # For reproducibility, generate a set of samples for the first `num_fixed_samples` using a fixed seed.
+        n_fixed = min(num_fixed_samples, num_samples)
+        if n_fixed > 0:
+            device_obj = device if isinstance(device, torch.device) else torch.device(device)
+            with torch.random.fork_rng(devices=[device_obj] if device_obj.type == "cuda" else []):
+                torch.manual_seed(fixed_seed)
+                samples = model.sample(
+                    n_fixed,
+                    device,
+                    image_size,
+                    batch_size=n_fixed,
+                    conditioning=conditioning[:n_fixed] if conditioning else None,
+                )
+            if n_fixed < num_samples:
+                rest = model.sample(
+                    num_samples - n_fixed,
+                    device,
+                    image_size,
+                    batch_size=num_samples - n_fixed,
+                    conditioning=conditioning[n_fixed:] if conditioning else None,
+                )
+                samples = torch.cat([samples, rest], dim=0)
         else:
-            # unconditional sampling
-            samples = model.sample(num_samples, device, image_size, batch_size=num_samples)
+            samples = model.sample(num_samples, device, image_size, batch_size=num_samples, conditioning=conditioning)
 
     # log a few images
     samples_cpu = samples.cpu()
@@ -164,6 +181,8 @@ def train(
     save_dir: str = "./",
     save_after_epoch: int = float("inf"),
     amp_dtype: torch.dtype | None = torch.float16,
+    num_fixed_samples: int = 0,
+    fixed_seed: int = 42,
 ):
     prev_best_score = float("inf")
     for epoch in range(start_epoch, epochs):
@@ -186,6 +205,8 @@ def train(
                 save_dir=save_dir,
                 dataloader=dataloader,
                 is_ema=False,
+                num_fixed_samples=num_fixed_samples,
+                fixed_seed=fixed_seed,
             )
             eval_sample(
                 model_ema,
@@ -195,6 +216,8 @@ def train(
                 step=(epoch + 1) * len(dataloader),
                 save_dir=save_dir,
                 dataloader=dataloader,
+                num_fixed_samples=num_fixed_samples,
+                fixed_seed=fixed_seed,
             )
         # Generate evaluation samples/metrics
         if metric_interval is not None and ((epoch + 1) % metric_interval == 0 or epoch + 1 == epochs):
@@ -351,6 +374,8 @@ def main(config_path: str = "config.yaml"):
         save_dir=f"./runs/{run_name}",
         save_after_epoch=cfg["training"].get("save_after_epoch", float("inf")),
         amp_dtype=amp_dtype,
+        num_fixed_samples=cfg["training"].get("num_fixed_samples", 0),
+        fixed_seed=cfg["experiment"].get("seed", 42),
     )
 
 
