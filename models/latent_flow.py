@@ -35,8 +35,8 @@ class LatentFlowModel(LatentVAEBase):
         kwargs.pop("in_channels", None)
         kwargs.pop("image_size", None)
 
-        # renormalize=False: VAE scaling factor already handles the range; the flow
-        # model should not re-normalize latents a second time
+        # renormalise=False: VAE scaling factor already handles the range; the flow
+        # model should not re-normalise latents a second time
         self.model = FlowModel(
             in_channels=4,
             base_channels=base_channels,
@@ -49,7 +49,7 @@ class LatentFlowModel(LatentVAEBase):
             sample_condition_weight=sample_condition_weight,
             use_attention=use_attention,
             device=device,
-            renormalize=False,
+            renormalise=False,
             *args,
             **kwargs,
         )
@@ -109,7 +109,7 @@ class LatentFlowModel(LatentVAEBase):
         latent_size = (image_size[0] // 8, image_size[1] // 8)
 
         # sample() handles conditioning=None for conditional models and delegates
-        # to sample_flow(); clamp_output=False so we can decode and renormalize first
+        # to sample_flow(); clamp_output=False so we can decode and renormalise first
         latents = self.model.sample(
             num_samples=num_samples,
             device=device,

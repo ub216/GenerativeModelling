@@ -82,9 +82,9 @@ class TestInit:
         # The UNet inside MeanFlowModel must operate on 4-channel latents
         assert model.model.in_channels == 4
 
-    def test_inner_model_renormalize_disabled(self, model):
+    def test_inner_model_renormalise_disabled(self, model):
         # The outer model owns pixel normalisation; the inner must not double-normalise
-        assert model.model.renormalize is False
+        assert model.model.renormalise is False
 
     def test_inner_model_has_dual_time_embedding(self, model):
         # MeanFlow UNet needs separate embeddings for t and Δt

@@ -26,7 +26,7 @@ class FlowModel(BaseModel):
         text_emb_dim: Optional[int] = None,
         drop_condition_ratio: float = 0.25,
         sample_condition_weight: int = 10,
-        renormalize: bool = False,
+        renormalise: bool = False,
         use_attention: bool = False,
     ):
         super().__init__()
@@ -46,7 +46,7 @@ class FlowModel(BaseModel):
         self.text_emb_dim = text_emb_dim
         self.drop_condition_ratio = drop_condition_ratio
         self.sample_condition_weight = sample_condition_weight
-        self.renormalize = renormalize
+        self.renormalise = renormalise
         self.has_conditional_generation = True if text_emb_dim is not None else False
         if self.has_conditional_generation:
             logger.info("Created a conditioned flow matching model")
@@ -65,7 +65,7 @@ class FlowModel(BaseModel):
         if not self.valid_input_combination(conditioning):
             raise ValueError("Invalid input combination")
 
-        if self.renormalize:
+        if self.renormalise:
             x0 = x0 * 2.0 - 1.0  # to [-1, 1]
 
         if time_steps is None:
@@ -108,7 +108,7 @@ class FlowModel(BaseModel):
             dynamic_threshold=dynamic_threshold,
             threshold_coeff=threshold_coeff,
         )
-        if self.renormalize:
+        if self.renormalise:
             samples = (samples + 1.0) / 2.0
         if clamp_output:
             samples = samples.clamp(0.0, 1.0)
@@ -132,7 +132,7 @@ class FlowModel(BaseModel):
         image_size: (H, W) tuple
         batch_size: int
         conditioning: input conditioning
-        returns: (num_samples, C, H, W) raw tensor (not clamped or renormalized)
+        returns: (num_samples, C, H, W) raw tensor (not clamped or renormalised)
         """
         if not self.valid_input_combination(conditioning):
             raise ValueError("Invalid input combination")

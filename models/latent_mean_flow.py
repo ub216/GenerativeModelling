@@ -40,8 +40,8 @@ class LatentMeanFlowModel(LatentVAEBase):
         kwargs.pop("in_channels", None)
         kwargs.pop("image_size", None)
 
-        # renormalize=False: VAE scaling factor already handles the range; the MeanFlow
-        # model must not re-normalize latents a second time
+        # renormalise=False: VAE scaling factor already handles the range; the MeanFlow
+        # model must not re-normalise latents a second time
         self.model = MeanFlowModel(
             in_channels=4,
             base_channels=base_channels,
@@ -58,7 +58,7 @@ class LatentMeanFlowModel(LatentVAEBase):
             logit_sigma=logit_sigma,
             logit_mu=logit_mu,
             device=device,
-            renormalize=False,
+            renormalise=False,
             *args,
             **kwargs,
         )

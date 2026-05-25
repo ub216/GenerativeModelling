@@ -82,9 +82,9 @@ class TestInit:
         # The UNet inside FlowModel must operate on 4-channel latents
         assert model.model.in_channels == 4
 
-    def test_inner_flow_model_renormalize_disabled(self, model):
+    def test_inner_flow_model_renormalise_disabled(self, model):
         # The outer model owns pixel normalisation; the inner must not double-normalise
-        assert model.model.renormalize is False
+        assert model.model.renormalise is False
 
 
 # ---------------------------------------------------------------------------

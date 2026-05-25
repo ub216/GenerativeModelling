@@ -27,7 +27,7 @@ class MeanFlowModel(FlowModel):
         text_emb_dim: Optional[int] = None,
         drop_condition_ratio: float = 0.1,  # paper Sec 4.2: 10% unconditional training
         sample_condition_weight: float = 1.0,  # ω in Eq 21; effective scale ω'=ω/(1-κ)=2.0 (ImageNet B/2 Table 4)
-        renormalize: bool = False,
+        renormalise: bool = False,
         use_attention: bool = False,
         same_time_ratio: float = 0.75,  # fraction of batch where r=t is forced; ImageNet B/2: 75% (Table 4)
         kappa: float = 0.5,  # κ in Eq 21; CFG mixing weight (ImageNet B/2 Table 4)
@@ -46,7 +46,7 @@ class MeanFlowModel(FlowModel):
             test_timesteps=test_timesteps,
             drop_condition_ratio=drop_condition_ratio,
             sample_condition_weight=sample_condition_weight,
-            renormalize=renormalize,
+            renormalise=renormalise,
             use_attention=use_attention,
         )
         # Replace the single-time UNet created by FlowModel with a dual-time one for MeanFlow
@@ -84,7 +84,7 @@ class MeanFlowModel(FlowModel):
         if not self.valid_input_combination(conditioning):
             raise ValueError("Invalid input combination")
 
-        if self.renormalize:
+        if self.renormalise:
             x0 = x0 * 2.0 - 1.0  # to [-1, 1]
 
         b = x0.shape[0]
@@ -195,7 +195,7 @@ class MeanFlowModel(FlowModel):
         image_size: (H, W) tuple
         batch_size: int
         conditioning: input conditioning
-        returns: (num_samples, C, H, W) raw tensor (not clamped or renormalized)
+        returns: (num_samples, C, H, W) raw tensor (not clamped or renormalised)
         """
         if not self.valid_input_combination(conditioning):
             raise ValueError("Invalid input combination")
