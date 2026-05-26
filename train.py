@@ -38,6 +38,10 @@ def train_one_epoch(
     t0 = time.time()
     model.train()
     total_loss = defaultdict(float)
+
+    # Shuffle data differently at each epoch for distributed training
+    if dist_utils.is_distributed() and hasattr(dataloader.sampler, "set_epoch"):
+        dataloader.sampler.set_epoch(epoch)
     pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}", leave=False)
     optimizer_manager.zero_grad()
 

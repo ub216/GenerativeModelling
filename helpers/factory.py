@@ -5,6 +5,7 @@ import torch
 from loguru import logger
 
 import helpers.custom_types as custom_types
+import helpers.distributed_utils as dist_utils
 import loaders
 import losses
 import metrics
@@ -65,15 +66,41 @@ def get_dataset(cfg: Dict[str, Any], batch_size=None) -> torch.utils.data.DataLo
         params["batch_size"] = batch_size
 
     if name == "mnist":
-        return loaders.get_mnist_dataloader(**_prepare_params(loaders.get_mnist_dataloader, user_param_keys, params))
+        loader = loaders.get_mnist_dataloader(**_prepare_params(loaders.get_mnist_dataloader, user_param_keys, params))
     elif name == "celeb":
-        return loaders.get_celeb_dataloader(**_prepare_params(loaders.get_celeb_dataloader, user_param_keys, params))
+        loader = loaders.get_celeb_dataloader(**_prepare_params(loaders.get_celeb_dataloader, user_param_keys, params))
     elif name == "celeb_hq":
-        return loaders.get_celeb_hq_dataloader(
+        loader = loaders.get_celeb_hq_dataloader(
             **_prepare_params(loaders.get_celeb_hq_dataloader, user_param_keys, params)
         )
     else:
         raise ValueError(f"Unknown dataset: {name}")
+
+    # If distributed, wrap with DistributedSampler to split and shuffle across processes.
+    # drop_last=True ensures all ranks see the same number of batches; without it the
+    # sampler pads with repeated indices, causing some samples to be counted twice per epoch.
+    if dist_utils.is_distributed():
+        old_loader = loader
+        # DataLoader does not expose a .shuffle attribute; detect from sampler type.
+        # Distributed training loaders should always shuffle — non-shuffled loaders use SequentialSampler.
+        shuffle = isinstance(old_loader.sampler, torch.utils.data.SequentialSampler) is False
+        sampler = torch.utils.data.distributed.DistributedSampler(
+            old_loader.dataset,
+            shuffle=shuffle,
+            drop_last=old_loader.drop_last,
+        )
+        loader = torch.utils.data.DataLoader(
+            loader.dataset,
+            batch_size=old_loader.batch_size,
+            sampler=sampler,
+            num_workers=old_loader.num_workers,
+            pin_memory=old_loader.pin_memory,
+        )
+        # Copy custom attributes set by individual loaders (e.g. image_size)
+        for attr in ("image_size",):
+            if hasattr(old_loader, attr):
+                setattr(loader, attr, getattr(old_loader, attr))
+    return loader
 
 
 def get_loss_function(cfg: Dict[str, Any]) -> torch.nn.Module:
