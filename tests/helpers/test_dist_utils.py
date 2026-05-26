@@ -3,6 +3,8 @@ import socket
 
 import torch
 import torch.multiprocessing as mp
+import torch.nn as nn
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from helpers.distributed_utils import (
     cleanup_distributed_training,
@@ -12,6 +14,7 @@ from helpers.distributed_utils import (
     is_distributed,
     is_main_process,
     reduce_tensor,
+    unwrap_model,
 )
 
 _WORLD_SIZE = 2
@@ -60,6 +63,24 @@ def _worker_reduce_mean(rank: int, world_size: int, port: int) -> None:
     _teardown()
 
 
+def _worker_unwrap_model(rank: int, world_size: int, port: int) -> None:
+    _setup(rank, world_size, port)
+
+    raw = nn.Linear(4, 2)
+    ddp = DDP(raw)
+
+    assert unwrap_model(ddp) is raw, f"Rank {rank}: unwrap_model should return the inner module"
+    assert unwrap_model(raw) is raw, f"Rank {rank}: unwrap_model on a plain model should be a no-op"
+
+    # Parameter names on the unwrapped model must not carry the 'module.' prefix
+    names = [n for n, _ in unwrap_model(ddp).named_parameters()]
+    assert all(
+        "module." not in n for n in names
+    ), f"Rank {rank}: unwrapped model has unexpected 'module.' prefix in param names: {names}"
+
+    _teardown()
+
+
 def test_rank_and_world_size_detection():
     port = _find_free_port()
     mp.spawn(_worker_rank_world_size, args=(_WORLD_SIZE, port), nprocs=_WORLD_SIZE, join=True)
@@ -68,3 +89,8 @@ def test_rank_and_world_size_detection():
 def test_reduce_tensor_averages_across_ranks():
     port = _find_free_port()
     mp.spawn(_worker_reduce_mean, args=(_WORLD_SIZE, port), nprocs=_WORLD_SIZE, join=True)
+
+
+def test_unwrap_model_strips_ddp():
+    port = _find_free_port()
+    mp.spawn(_worker_unwrap_model, args=(_WORLD_SIZE, port), nprocs=_WORLD_SIZE, join=True)

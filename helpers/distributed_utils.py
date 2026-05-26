@@ -3,6 +3,8 @@ from typing import Tuple
 
 import torch
 
+from helpers.utils import cuda_available
+
 
 def init_distributed_training(backend: str | None = None) -> Tuple[int, int]:
     """Initialize distributed training environment.
@@ -18,7 +20,7 @@ def init_distributed_training(backend: str | None = None) -> Tuple[int, int]:
     if "RANK" not in os.environ:
         return 0, 1
     if backend is None:
-        backend = "nccl" if torch.cuda.is_available() else "gloo"
+        backend = "nccl" if cuda_available() else "gloo"
 
     if not is_distributed():
         torch.distributed.init_process_group(backend=backend)
@@ -81,3 +83,15 @@ def reduce_tensor(tensor: torch.Tensor, op: str = "mean") -> torch.Tensor:
         if op == "mean":
             tensor /= get_world_size()
     return tensor
+
+
+def get_state_dict(model):
+    """Get the state dict of a model, handling DDP wrapping"""
+    return unwrap_model(model).state_dict()
+
+
+def unwrap_model(model):
+    """Unwrap a model from DistributedDataParallel if necessary"""
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        return model.module
+    return model

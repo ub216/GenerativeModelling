@@ -19,7 +19,7 @@ import wandb
 from helpers.diffusion_utils import drop_condition
 from helpers.factory import get_dataset, get_loss_function, get_metrics, get_model, get_optimizer_manager
 from helpers.optimizer_manager import OptimizerManager
-from helpers.utils import save_eval_results
+from helpers.utils import cuda_available, save_eval_results
 
 
 # -----------------------------
@@ -205,7 +205,7 @@ def train(
         # Generate samples for monitoring (cheaper than FID; gated independently)
         if (epoch + 1) % sample_interval == 0 or epoch + 1 == epochs:
             eval_sample(
-                model,
+                dist_utils.unwrap_model(model),
                 num_samples=9,
                 device=device,
                 image_size=dataloader.image_size,
@@ -217,7 +217,7 @@ def train(
                 fixed_seed=fixed_seed,
             )
             eval_sample(
-                model_ema,
+                dist_utils.unwrap_model(model_ema),
                 num_samples=9,
                 device=device,
                 image_size=dataloader.image_size,
@@ -254,8 +254,8 @@ def train(
                 prev_best_score = curr_score
                 checkpoint = {
                     "epoch": epoch,
-                    "model_state_dict": model.state_dict(),
-                    "model_ema_state_dict": model_ema.state_dict(),
+                    "model_state_dict": dist_utils.get_state_dict(model),
+                    "model_ema_state_dict": dist_utils.get_state_dict(model_ema),
                     "optimizer_state_dict": optimizer_manager.state_dict(),
                     "loss": epoch_loss,
                     "primary_score": curr_score,
@@ -265,8 +265,8 @@ def train(
             # Save last model
             checkpoint = {
                 "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "model_ema_state_dict": model_ema.state_dict(),
+                "model_state_dict": dist_utils.get_state_dict(model),
+                "model_ema_state_dict": dist_utils.get_state_dict(model_ema),
                 "optimizer_state_dict": optimizer_manager.state_dict(),
                 "loss": epoch_loss,
             }
@@ -293,7 +293,7 @@ def main(config_path: str = "config.yaml"):
             cfg = yaml.safe_load(f)
 
         # Each distributed process must own its own GPU; fall back to config for single-process
-        if dist_utils.is_distributed():
+        if dist_utils.is_distributed() and cuda_available():
             device = f"cuda:{os.environ['LOCAL_RANK']}"
         else:
             device = cfg["training"]["device"]
@@ -339,6 +339,17 @@ def main(config_path: str = "config.yaml"):
         model.to(device)
         model_ema.to(device)
 
+        if dist_utils.is_distributed():
+            # EMA is not wrapped in DDP: it never runs backward, so no gradient
+            # sync is needed. Shadow weights stay in sync naturally — DDP keeps
+            # online params identical on all ranks, and the EMA update is
+            # deterministic, so shadow params remain identical too.
+            local_rank = int(os.environ["LOCAL_RANK"])
+            model = torch.nn.parallel.DistributedDataParallel(
+                model,
+                device_ids=[local_rank] if cuda_available() else None,
+            )
+
         if cfg["training"].get("compile", False):
             logger.info("Compiling model with torch.compile(mode='reduce-overhead')...")
             model = torch.compile(model, mode="reduce-overhead")
@@ -358,8 +369,8 @@ def main(config_path: str = "config.yaml"):
             # counter so stage-2 fine-tuning starts with a fresh optimizer and LR schedule
             weights_only = cfg["model"].get("checkpoint_weights_only", False)
             checkpoint = torch.load(ckpt, map_location=device)
-            model.load_state_dict(checkpoint["model_state_dict"], strict=False)
-            model_ema.load_state_dict(checkpoint["model_ema_state_dict"], strict=False)
+            dist_utils.unwrap_model(model).load_state_dict(checkpoint["model_state_dict"], strict=False)
+            dist_utils.unwrap_model(model_ema).load_state_dict(checkpoint["model_ema_state_dict"], strict=False)
             if not weights_only:
                 if "optimizer_state_dict" in checkpoint:
                     optimizer_manager.load_state_dict(checkpoint["optimizer_state_dict"])

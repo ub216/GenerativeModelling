@@ -17,7 +17,10 @@ class EMAModel(BaseModel):
     @torch.no_grad()
     def update(self, online_model):
         """Update the shadow weights: shadow = shadow * decay + online * (1 - decay)"""
-        online_params = dict(online_model.named_parameters())
+        _online_model = (
+            online_model.module if isinstance(online_model, torch.nn.parallel.DistributedDataParallel) else online_model
+        )
+        online_params = dict(_online_model.named_parameters())
         shadow_params = dict(self.model.named_parameters())
 
         for name, param in online_params.items():

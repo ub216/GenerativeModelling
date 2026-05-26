@@ -81,3 +81,8 @@ def save_eval_results(
     # remove extra channel dimension if grayscale
     grid_image = grid_image[:, :, ::-1].squeeze()
     cv2.imwrite(filename, grid_image)
+
+
+def cuda_available() -> bool:
+    """Check if CUDA is available"""
+    return torch.cuda.is_available()
