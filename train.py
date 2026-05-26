@@ -42,7 +42,7 @@ def train_one_epoch(
     # Shuffle data differently at each epoch for distributed training
     if dist_utils.is_distributed() and hasattr(dataloader.sampler, "set_epoch"):
         dataloader.sampler.set_epoch(epoch)
-    pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}", leave=False)
+    pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}", leave=False, disable=not dist_utils.is_main_process())
     optimizer_manager.zero_grad()
 
     for idx, (inputs, labels) in enumerate(pbar):
@@ -75,18 +75,20 @@ def train_one_epoch(
         metrics = optimizer_manager.step()
         if metrics:
             optimizer_manager.zero_grad()
-            wandb.log(metrics, step=epoch * len(dataloader) + idx)
             # Update EMA model
             model_ema.update(model)
+            if dist_utils.is_main_process():
+                wandb.log(metrics, step=epoch * len(dataloader) + idx)
 
         # Logging
         update_stats = {}
         for key in loss.keys():
             total_loss[key] += loss[key].item()
-            wandb.log(
-                {f"batch_{key}_loss": loss[key].item()},
-                step=epoch * len(dataloader) + idx,
-            )
+            if dist_utils.is_main_process():
+                wandb.log(
+                    {f"batch_{key}_loss": loss[key].item()},
+                    step=epoch * len(dataloader) + idx,
+                )
             update_stats[key] = total_loss[key] / (idx + 1)
         pbar.set_postfix(update_stats)
 
@@ -199,78 +201,83 @@ def train(
             model, model_ema, dataloader, optimizer_manager, criterion, device, epoch, amp_dtype
         )
         epoch_time = time.time() - t0
-        wandb.log({"epoch_time": epoch_time}, step=(epoch + 1) * len(dataloader))
-        wandb.log({"epoch_loss": epoch_loss}, step=(epoch + 1) * len(dataloader))
 
-        # Generate samples for monitoring (cheaper than FID; gated independently)
-        if (epoch + 1) % sample_interval == 0 or epoch + 1 == epochs:
-            eval_sample(
-                dist_utils.unwrap_model(model),
-                num_samples=9,
-                device=device,
-                image_size=dataloader.image_size,
-                step=(epoch + 1) * len(dataloader),
-                save_dir=save_dir,
-                dataloader=dataloader,
-                is_ema=False,
-                num_fixed_samples=num_fixed_samples,
-                fixed_seed=fixed_seed,
-            )
-            eval_sample(
-                dist_utils.unwrap_model(model_ema),
-                num_samples=9,
-                device=device,
-                image_size=dataloader.image_size,
-                step=(epoch + 1) * len(dataloader),
-                save_dir=save_dir,
-                dataloader=dataloader,
-                num_fixed_samples=num_fixed_samples,
-                fixed_seed=fixed_seed,
-            )
-        # Generate evaluation samples/metrics
-        if metric_interval is not None and ((epoch + 1) % metric_interval == 0 or epoch + 1 == epochs):
+        # Metrics and model checkpointing (only on main process)
+        if dist_utils.is_main_process():
+            wandb.log({"epoch_time": epoch_time}, step=(epoch + 1) * len(dataloader))
+            wandb.log({"epoch_loss": epoch_loss}, step=(epoch + 1) * len(dataloader))
 
-            curr_score = None
-            description = ""
-            for metric in compute_metrics:
-                # metrics are computed on unconditioned input only
-                if isinstance(metric, metrics.ImageDistributionMetric):
-                    sampler_loader = model.wrap_sampler_to_loader(
-                        num_samples=metric.samples,
-                        device=device,
-                        image_size=dataloader.image_size,
-                        batch_size=dataloader.batch_size,
-                    )
-                    score = metric(dataloader, sampler_loader)
-                    wandb.log({metric.name: score}, step=(epoch + 1) * len(dataloader))
-                    description += f", {metric.name}: {score:.4f}"
-                    if metric.primary_metric:
-                        curr_score = score
+            # Generate samples for monitoring (cheaper than FID; gated independently)
+            if (epoch + 1) % sample_interval == 0 or epoch + 1 == epochs:
+                eval_sample(
+                    dist_utils.unwrap_model(model),
+                    num_samples=9,
+                    device=device,
+                    image_size=dataloader.image_size,
+                    step=(epoch + 1) * len(dataloader),
+                    save_dir=save_dir,
+                    dataloader=dataloader,
+                    is_ema=False,
+                    num_fixed_samples=num_fixed_samples,
+                    fixed_seed=fixed_seed,
+                )
+                eval_sample(
+                    dist_utils.unwrap_model(model_ema),
+                    num_samples=9,
+                    device=device,
+                    image_size=dataloader.image_size,
+                    step=(epoch + 1) * len(dataloader),
+                    save_dir=save_dir,
+                    dataloader=dataloader,
+                    num_fixed_samples=num_fixed_samples,
+                    fixed_seed=fixed_seed,
+                )
+            # Generate evaluation samples/metrics
+            if metric_interval is not None and ((epoch + 1) % metric_interval == 0 or epoch + 1 == epochs):
 
-            logger.info(f"Epoch {epoch+1}: {description}")
+                curr_score = None
+                description = ""
+                for metric in compute_metrics:
+                    # metrics are computed on unconditioned input only
+                    if isinstance(metric, metrics.ImageDistributionMetric):
+                        sampler_loader = dist_utils.unwrap_model(model).wrap_sampler_to_loader(
+                            num_samples=metric.samples,
+                            device=device,
+                            image_size=dataloader.image_size,
+                            batch_size=dataloader.batch_size,
+                        )
+                        score = metric(dataloader, sampler_loader)
+                        wandb.log({metric.name: score}, step=(epoch + 1) * len(dataloader))
+                        description += f", {metric.name}: {score:.4f}"
+                        if metric.primary_metric:
+                            curr_score = score
 
-            # Save best and last model
-            if curr_score is not None and (curr_score <= prev_best_score or epoch + 1 == epochs):
-                prev_best_score = curr_score
+                logger.info(f"Epoch {epoch+1}: {description}")
+
+                # Save best and last model
+                if curr_score is not None and (curr_score <= prev_best_score or epoch + 1 == epochs):
+                    prev_best_score = curr_score
+                    checkpoint = {
+                        "epoch": epoch,
+                        "model_state_dict": dist_utils.get_state_dict(model),
+                        "model_ema_state_dict": dist_utils.get_state_dict(model_ema),
+                        "optimizer_state_dict": optimizer_manager.state_dict(),
+                        "loss": epoch_loss,
+                        "primary_score": curr_score,
+                    }
+                    torch.save(checkpoint, f"{save_dir}/best_{epoch+1}.pth")
+            if epoch % save_after_epoch == 0:
+                # Save last model
                 checkpoint = {
                     "epoch": epoch,
                     "model_state_dict": dist_utils.get_state_dict(model),
                     "model_ema_state_dict": dist_utils.get_state_dict(model_ema),
                     "optimizer_state_dict": optimizer_manager.state_dict(),
                     "loss": epoch_loss,
-                    "primary_score": curr_score,
                 }
-                torch.save(checkpoint, f"{save_dir}/best_{epoch+1}.pth")
-        if epoch % save_after_epoch == 0:
-            # Save last model
-            checkpoint = {
-                "epoch": epoch,
-                "model_state_dict": dist_utils.get_state_dict(model),
-                "model_ema_state_dict": dist_utils.get_state_dict(model_ema),
-                "optimizer_state_dict": optimizer_manager.state_dict(),
-                "loss": epoch_loss,
-            }
-            torch.save(checkpoint, f"{save_dir}/epoch_{epoch+1}.pth")
+                torch.save(checkpoint, f"{save_dir}/epoch_{epoch+1}.pth")
+        if dist_utils.is_distributed():
+            torch.distributed.barrier()  # sync before next epoch starts
     logger.info("Training complete.")
 
 
@@ -318,15 +325,16 @@ def main(config_path: str = "config.yaml"):
         torch.manual_seed(cfg["experiment"].get("seed", 42))
         logger.info(f"Torch seed set to {cfg['experiment'].get('seed', 42)}")
         run_name = f"{cfg['model']['type'].lower()}_{cfg['dataset']['type'].lower()}_{time.strftime('%Y%m%d-%H%M%S')}"
-        wandb.init(
-            project=cfg["experiment"]["name"],
-            name=run_name,
-            config=cfg,
-        )
-        run_dir = f"./runs/{run_name}"
-        logger.info(f"Saving intermidiate results to {run_dir}")
-        os.makedirs(run_dir, exist_ok=True)
-        shutil.copy(config_path, f"./runs/{run_name}/config.yaml")
+        if dist_utils.is_main_process():
+            wandb.init(
+                project=cfg["experiment"]["name"],
+                name=run_name,
+                config=cfg,
+            )
+            run_dir = f"./runs/{run_name}"
+            logger.info(f"Saving intermidiate results to {run_dir}")
+            os.makedirs(run_dir, exist_ok=True)
+            shutil.copy(config_path, f"./runs/{run_name}/config.yaml")
 
         # Setup Dataloader
         dataloader = get_dataset(cfg["dataset"], cfg["training"].get("batch_size", None))
