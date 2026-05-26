@@ -10,7 +10,7 @@ import loaders
 import losses
 import metrics
 import models
-from helpers.optimizer_manager import OptimizerManager
+from engine.optimizer_manager import OptimizerManager
 
 
 def _prepare_params(callable_: type | Callable, user_param_keys: set, all_params: dict) -> dict:

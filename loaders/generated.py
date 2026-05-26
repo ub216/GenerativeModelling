@@ -1,12 +1,12 @@
 from typing import Tuple
 
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import IterableDataset
 
 import helpers.custom_types as custom_types
 
 
-class GeneratedDataset(Dataset):
+class GeneratedDataset(IterableDataset):
     def __init__(
         self,
         model: custom_types.GenBaseModel,
@@ -25,6 +25,11 @@ class GeneratedDataset(Dataset):
         return self.num_samples
 
     @torch.no_grad()
-    def __getitem__(self, *args, **kwargs) -> Tuple[torch.Tensor, str]:
-        sample = self.model.sample(1, self.device, self.image_size, batch_size=1).squeeze(0)  # (C,H,W)
-        return sample, str(0)  # label not needed
+    def __iter__(self):
+        generated = 0
+        while generated < self.num_samples:
+            bs = min(self.batch_size, self.num_samples - generated)
+            samples = self.model.sample(bs, self.device, self.image_size, batch_size=bs)
+            for sample in samples:
+                yield sample, str(0)
+            generated += bs

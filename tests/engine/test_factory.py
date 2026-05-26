@@ -1,8 +1,8 @@
 import pytest
 import torch
 
-from helpers.factory import get_dataset, get_loss_function, get_model, get_optimizer_manager
-from helpers.optimizer_manager import OptimizerManager
+from engine.factory import get_dataset, get_loss_function, get_model, get_optimizer_manager
+from engine.optimizer_manager import OptimizerManager
 from losses.gan_hinge_loss import GANHingeLoss
 from losses.pair_mse import PairMSELoss
 from losses.pair_smooth import PairSmoothLoss

@@ -19,7 +19,7 @@ from edit_images.ddim_edit import (
 )
 from edit_images.face_align import FaceAligner
 from edit_images.face_verifier import FaceVerifier
-from helpers.factory import get_model
+from engine.factory import get_model
 from models.base_model import BaseModel
 
 

@@ -2,7 +2,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from helpers.optimizer_manager import OptimizerManager
+from engine.optimizer_manager import OptimizerManager
 
 
 @pytest.fixture
