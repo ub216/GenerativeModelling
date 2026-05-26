@@ -21,9 +21,14 @@ class InterleavedDPOLoss(nn.Module):
         Returns:
             torch.Tensor: The computed loss value.
         """
-        assert len(outputs) == 3, "Outputs must contain policy predictions, reference predictions, and target noise"
+        if len(outputs) != 3:
+            raise ValueError(f"outputs must contain (pol_pred, ref_pred, target_noise), got {len(outputs)} elements")
         pol_pred, ref_pred, target_noise = outputs
-        assert pol_pred.shape == ref_pred.shape == target_noise.shape, "Output tensors must have the same shape"
+        if not (pol_pred.shape == ref_pred.shape == target_noise.shape):
+            raise ValueError(
+                f"output tensors must have the same shape, "
+                f"got pol_pred={pol_pred.shape}, ref_pred={ref_pred.shape}, target_noise={target_noise.shape}"
+            )
 
         # calculate Per-Sample MSE [B_total]
         # B_total is 2 * batch_size_pairs

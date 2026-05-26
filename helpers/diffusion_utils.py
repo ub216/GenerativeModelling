@@ -9,7 +9,8 @@ def drop_condition(conditioning: List[str], r: float) -> List[str]:
     conditioning: Conditioning text
     r: percentage (0–1) of elements to replace with null condition ""
     """
-    assert r <= 1.0
+    if r > 1.0:
+        raise ValueError(f"r must be <= 1.0, got {r}")
     N = len(conditioning)
     if r == 1.0:
         log_once_warning("Drop conditioning is set to 1.0. All conditioning will be dropped")

@@ -54,7 +54,10 @@ def train_one_epoch(
         amp_ctx = autocast(device_type="cuda", dtype=amp_dtype) if amp_dtype else contextlib.nullcontext()
         with amp_ctx:
             outputs = model(inputs, conditioning=conditioning)
-            loss = criterion(outputs, inputs)
+            try:
+                loss = criterion(outputs, inputs)
+            except (ValueError, TypeError) as e:
+                raise type(e)(f"Loss {criterion.__class__.__name__} failed at epoch {epoch}, step {idx}: {e}") from e
 
         # Wrap loss in dict if not already
         # This is needed for optimizer manager
@@ -278,7 +281,8 @@ def main(config_path: str = "config.yaml"):
         parser.add_argument("--config", type=str, required=True, help="Config file path")
         args = parser.parse_args()
         config_path = args.config
-        assert os.path.isfile(config_path), f"Config file {config_path} not found"
+        if not os.path.isfile(config_path):
+            raise FileNotFoundError(f"Config file {config_path} not found")
 
         # Load config
         with open(config_path, "r") as f:

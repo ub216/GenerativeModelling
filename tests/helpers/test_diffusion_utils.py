@@ -43,5 +43,5 @@ def test_non_dropped_strings_unchanged():
 
 
 def test_ratio_above_one_raises():
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         drop_condition(["a", "b"], 1.5)

@@ -69,6 +69,8 @@ class ImageDistributionMetric(nn.Module, ABC):
         real_loader: torch.utils.data.DataLoader,
         gen_loader: torch.utils.data.DataLoader,
     ) -> float:
-        assert isinstance(real_loader, torch.utils.data.DataLoader), "real_loader must be a DataLoader"
-        assert isinstance(gen_loader, torch.utils.data.DataLoader), "gen_loader must be a DataLoader"
+        if not isinstance(real_loader, torch.utils.data.DataLoader):
+            raise TypeError(f"real_loader must be a DataLoader, got {type(real_loader).__name__}")
+        if not isinstance(gen_loader, torch.utils.data.DataLoader):
+            raise TypeError(f"gen_loader must be a DataLoader, got {type(gen_loader).__name__}")
         return self._compute(real_loader, gen_loader)

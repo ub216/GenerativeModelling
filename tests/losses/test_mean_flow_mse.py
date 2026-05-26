@@ -87,7 +87,7 @@ class TestGradContract:
 
     def test_requires_three_element_tuple(self, loss_fn):
         pred, target, _ = _make_outputs()
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             loss_fn((pred, target))
 
 

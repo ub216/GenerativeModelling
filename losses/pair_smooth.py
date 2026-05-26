@@ -10,10 +10,8 @@ import helpers.custom_types as custom_types
 class PairSmoothLoss(nn.Module):
     def __init__(self, reduction: custom_types.ReductionType = "mean", beta: float = 1.0):
         super().__init__()
-        assert reduction in [
-            "sum",
-            "mean",
-        ], "Reduction must be 'sum' or 'mean'"
+        if reduction not in ("sum", "mean"):
+            raise ValueError(f"reduction must be 'sum' or 'mean', got {reduction!r}")
         self.reduction = reduction
         self.beta = beta
 
@@ -31,7 +29,10 @@ class PairSmoothLoss(nn.Module):
             torch.Tensor: The computed loss value.
         """
 
-        assert len(outputs) >= 2 and outputs[0].shape == outputs[1].shape, "Outputs and inputs must have the same shape"
+        if len(outputs) < 2 or outputs[0].shape != outputs[1].shape:
+            raise ValueError(
+                f"outputs[0] and outputs[1] must have the same shape, " f"got {outputs[0].shape} vs {outputs[1].shape}"
+            )
         predicted, target = outputs[0], outputs[1]
 
         # Calculate raw MSE per pixel

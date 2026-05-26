@@ -26,7 +26,8 @@ def get_2d_sincos_pos_embed(embed_dim: int, grid_size: int | Tuple[int, int], cl
 
 
 def get_2d_sincos_pos_embed_from_grid(embed_dim: int, grid: Tuple[int, int]) -> np.ndarray:
-    assert embed_dim % 2 == 0
+    if embed_dim % 2 != 0:
+        raise ValueError(f"embed_dim must be even, got {embed_dim}")
 
     # use half of dimensions to encode grid_h
     emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[0])  # (H*W, D/2)
@@ -42,7 +43,8 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim: int, grid: np.ndarray) -> np.nd
     grid: a list of positions to be encoded: size (M,)
     out: (M, D)
     """
-    assert embed_dim % 2 == 0
+    if embed_dim % 2 != 0:
+        raise ValueError(f"embed_dim must be even, got {embed_dim}")
     omega = np.arange(embed_dim // 2, dtype=np.float32)
     omega /= embed_dim / 2.0
     omega = 1.0 / 10000**omega  # (D/2,)

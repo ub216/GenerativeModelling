@@ -46,11 +46,11 @@ class TestGANHingeLoss:
         assert torch.isclose(result["generator"], expected, atol=1e-6)
 
     def test_shape_mismatch_raises(self, loss_fn):
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             loss_fn((torch.rand(2, 1), torch.rand(2, 1), torch.rand(3, 1)))
 
     def test_too_few_outputs_raises(self, loss_fn):
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             loss_fn((torch.rand(2, 1), torch.rand(2, 1)))
 
     def test_generative_weight_scales_generator_loss(self):

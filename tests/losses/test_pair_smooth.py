@@ -25,11 +25,11 @@ class TestPairSmoothLoss:
         assert loss_fn((x, y)) > 0
 
     def test_shape_mismatch_raises(self, loss_fn):
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             loss_fn((torch.rand(2, 1, 4, 4), torch.rand(2, 1, 4, 8)))
 
     def test_invalid_reduction_raises(self):
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             PairSmoothLoss(reduction="invalid")
 
     def test_mean_vs_sum_reduction(self):

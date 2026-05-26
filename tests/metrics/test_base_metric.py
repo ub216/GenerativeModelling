@@ -67,11 +67,11 @@ class TestForwardValidation:
         return _DummyMetric(samples=10, device="cpu")
 
     def test_rejects_tensor_as_real_loader(self, metric):
-        with pytest.raises(AssertionError):
+        with pytest.raises(TypeError):
             metric(torch.rand(10, 3, 8, 8), _loader())
 
     def test_rejects_tensor_as_gen_loader(self, metric):
-        with pytest.raises(AssertionError):
+        with pytest.raises(TypeError):
             metric(_loader(), torch.rand(10, 3, 8, 8))
 
     def test_accepts_two_dataloaders_and_returns_float(self, metric):

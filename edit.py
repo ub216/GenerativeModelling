@@ -374,8 +374,10 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    assert os.path.isfile(args.config), f"Config file {args.config} not found"
-    assert os.path.isfile(args.input), f"Input image file {args.input} not found"
+    if not os.path.isfile(args.config):
+        raise FileNotFoundError(f"Config file {args.config} not found")
+    if not os.path.isfile(args.input):
+        raise FileNotFoundError(f"Input image file {args.input} not found")
     filename, ext = os.path.splitext(os.path.basename(args.input))
     os.makedirs("outputs_smiling", exist_ok=True)
 

@@ -26,11 +26,11 @@ class TestPairMSELoss:
     def test_shape_mismatch_raises(self, loss_fn):
         x = torch.rand(2, 1, 4, 4)
         y = torch.rand(2, 1, 4, 8)
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             loss_fn((x, y))
 
     def test_invalid_reduction_raises(self):
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             PairMSELoss(reduction="invalid")
 
     def test_mean_vs_sum_reduction(self):

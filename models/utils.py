@@ -13,7 +13,8 @@ def sinusoidal_embedding(timesteps: torch.Tensor, dim: int):
     timesteps: (B,) long tensor
     returns: (B, dim) float tensor
     """
-    assert len(timesteps.shape) == 1
+    if len(timesteps.shape) != 1:
+        raise ValueError(f"timesteps must be a 1-D tensor, got shape {tuple(timesteps.shape)}")
     device = timesteps.device
     half = dim // 2
     emb = math.log(10000) / (half - 1)

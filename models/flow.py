@@ -94,7 +94,8 @@ class FlowModel(BaseModel):
         *args,
         **kwargs,
     ) -> torch.Tensor:
-        assert conditioning is None or len(conditioning) == num_samples
+        if conditioning is not None and len(conditioning) != num_samples:
+            raise ValueError(f"conditioning length {len(conditioning)} must match num_samples {num_samples}")
         if isinstance(image_size, int):
             image_size = (image_size, image_size)
         if conditioning is None and self.has_conditional_generation:

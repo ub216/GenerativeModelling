@@ -15,10 +15,8 @@ class VAELoss(nn.Module):
         reduction: custom_types.ReductionType = "sum",
     ):
         super().__init__()
-        assert reduction in [
-            "sum",
-            "mean",
-        ], "Reduction must be 'sum' or 'mean'"
+        if reduction not in ("sum", "mean"):
+            raise ValueError(f"reduction must be 'sum' or 'mean', got {reduction!r}")
         self.recon_loss_weight = recon_loss_weight
         self.kl_div_weight = kl_div_weight
         self.reduction = reduction
@@ -29,7 +27,10 @@ class VAELoss(nn.Module):
         """
         Computes the VAE loss = KLdivergence + L2 reconstructing error
         """
-        assert isinstance(outputs, tuple) and len(outputs) == 3, "Outputs must be a tuple of (output, z_logvar, z_mean)"
+        if not isinstance(outputs, tuple) or len(outputs) != 3:
+            raise TypeError(
+                f"outputs must be a tuple of length 3 (output, z_mean, z_logvar), got {type(outputs).__name__}"
+            )
 
         output, z_mean, z_logvar = outputs
 

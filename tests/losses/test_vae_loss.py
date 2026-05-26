@@ -76,10 +76,10 @@ class TestVAELoss:
         assert torch.isclose(l_sum, l_mean * 8, atol=1e-5)
 
     def test_invalid_reduction_raises(self):
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             VAELoss(reduction="invalid")
 
     def test_wrong_tuple_length_raises(self, loss_fn):
         output = torch.rand(2, 4)
-        with pytest.raises(AssertionError):
+        with pytest.raises(TypeError):
             loss_fn((output, output), output)  # missing z_logvar

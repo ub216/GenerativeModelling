@@ -32,7 +32,10 @@ class MeanFlowMSELoss(nn.Module):
         self._loss = PairMSELoss(reduction=reduction, adaptive_power=adaptive_power, adaptive_eps=adaptive_eps)
 
     def forward(self, outputs, *args, **kwargs) -> Dict[str, torch.Tensor]:
-        assert len(outputs) >= 3, "MeanFlowMSELoss requires (pred, target, same_time_mask) from model"
+        if len(outputs) < 3:
+            raise ValueError(
+                f"MeanFlowMSELoss requires outputs = (pred, target, same_time_mask), got {len(outputs)} elements"
+            )
         pred, target, same_time = outputs[0], outputs[1], outputs[2]
 
         result = {"all": self._loss((pred, target))}

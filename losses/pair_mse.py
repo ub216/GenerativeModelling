@@ -12,11 +12,8 @@ class PairMSELoss(nn.Module):
         self, reduction: custom_types.ReductionType = "mean", adaptive_power: float = 0.5, adaptive_eps: float = 1e-3
     ):
         super().__init__()
-        assert reduction in [
-            "sum",
-            "mean",
-            "adaptive",
-        ], "Reduction must be 'sum', 'mean' or 'adaptive'"
+        if reduction not in ("sum", "mean", "adaptive"):
+            raise ValueError(f"reduction must be 'sum', 'mean', or 'adaptive', got {reduction!r}")
         self.reduction = reduction
         self.adaptive_power = adaptive_power
         self.adaptive_eps = adaptive_eps
@@ -34,9 +31,10 @@ class PairMSELoss(nn.Module):
         Returns:
             torch.Tensor: The computed loss value.
         """
-        assert (
-            len(outputs) >= 2 and outputs[0].shape == outputs[1].shape
-        ), "Outputs and targets must have the same shape"
+        if len(outputs) < 2 or outputs[0].shape != outputs[1].shape:
+            raise ValueError(
+                f"outputs[0] and outputs[1] must have the same shape, " f"got {outputs[0].shape} vs {outputs[1].shape}"
+            )
         predicted, target = outputs[0], outputs[1]
 
         # Calculate raw MSE per pixel

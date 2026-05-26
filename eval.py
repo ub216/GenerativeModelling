@@ -97,7 +97,8 @@ def main(config_path: str = "config.yaml"):
     parser.add_argument("--image_channels", type=int, default=None, help="Model image channels")
     args = parser.parse_args()
     config_path = args.config
-    assert os.path.isfile(config_path), f"Config file {config_path} not found"
+    if not os.path.isfile(config_path):
+        raise FileNotFoundError(f"Config file {config_path} not found")
 
     # Load config
     with open(config_path, "r") as f:

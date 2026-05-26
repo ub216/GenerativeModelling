@@ -130,13 +130,15 @@ def get_model(
 
     logger.info(f"Model params: {params}")
     if name == "vae":
-        assert h == w, "VAE implementation can only handle square images for now"
+        if h != w:
+            raise ValueError(f"VAE implementation requires square images, got {h}x{w}")
         vae_params = _prepare_params(models.VAE, user_param_keys, params)
         return models.VAE(**vae_params), (
             models.EMAModel(models.VAE(**vae_params), decay=ema_decay) if build_ema else None
         )
     if name == "gan":
-        assert h == w, "GAN implementation can only handle square images for now"
+        if h != w:
+            raise ValueError(f"GAN implementation requires square images, got {h}x{w}")
         gan_params = _prepare_params(models.GAN, user_param_keys, params)
         return models.GAN(**gan_params), (
             models.EMAModel(models.GAN(**gan_params), decay=ema_decay) if build_ema else None
@@ -224,7 +226,8 @@ def get_optimizer_manager(
     else:
         for name, key in cfg.items():
             module = getattr(model, name, None)
-            assert module is not None, f"{module} does not exists in model parameter groups"
+            if module is None:
+                raise ValueError(f"'{name}' does not exist in model parameter groups")
             optimizer[name] = _get_optimizer(key["type"], module.parameters(), key.get("params", {}))
     # GradScaler is only needed for FP16 overflow recovery; BF16 and disabled AMP don't need it
     use_scaler = amp_dtype == torch.float16

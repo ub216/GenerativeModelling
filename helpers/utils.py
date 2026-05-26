@@ -27,7 +27,8 @@ def save_eval_results(
     if conditioning is provided, it is overlayed on the corresponding input to the top-left corner.
     if unconditioned then nothing is overlayed.
     """
-    assert len(samples.shape) == 4  # (N, C, H, W)
+    if len(samples.shape) != 4:
+        raise ValueError(f"samples must be a 4-D tensor (N, C, H, W), got shape {tuple(samples.shape)}")
     num_samples = samples.size(0)
     grid_size = int(np.ceil(np.sqrt(num_samples)))
     sample_height, sample_width, sample_channels = (
@@ -42,10 +43,8 @@ def save_eval_results(
         dtype=np.uint8,
     )
     # normalize conditioning list length if provided
-    if conditioning is not None:
-        assert (
-            len(conditioning) == num_samples
-        ), f"conditioning length {len(conditioning)} must match samples {num_samples}"
+    if conditioning is not None and len(conditioning) != num_samples:
+        raise ValueError(f"conditioning length {len(conditioning)} must match num_samples {num_samples}")
 
     for idx in range(num_samples):
         row = idx // grid_size

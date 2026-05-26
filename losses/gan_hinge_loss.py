@@ -25,9 +25,11 @@ class GANHingeLoss(nn.Module):
         Computes the GAN higne loss
         returns: generator loss, discriminator loss
         """
-        assert (
-            len(outputs) == 3 and outputs[0].shape == outputs[1].shape == outputs[2].shape
-        ), "Outputs and inputs must have the same shape"
+        if len(outputs) != 3 or not (outputs[0].shape == outputs[1].shape == outputs[2].shape):
+            raise ValueError(
+                f"outputs must be 3 tensors of equal shape, got lengths={len(outputs)}"
+                + (f" shapes={outputs[0].shape}, {outputs[1].shape}, {outputs[2].shape}" if len(outputs) == 3 else "")
+            )
         generator_score_gen, generator_score_dis, real_score = outputs
 
         discriminator_loss = torch.mean(F.relu(1.0 - real_score)) + torch.mean(F.relu(1.0 - generator_score_dis))
