@@ -70,7 +70,7 @@ def train_one_epoch(
             loss = {"all": loss}
 
         # backward pass with AMP scaler
-        optimizer_manager.backward(loss)
+        optimizer_manager.backward(loss, model=model)
 
         metrics = optimizer_manager.step()
         if metrics:
@@ -102,7 +102,7 @@ def train_one_epoch(
         avg_loss = total_loss[key] / len(dataloader)
         update_stats += f" {key} : {avg_loss:.4f}"
     logger.info(update_stats)
-    return avg_loss
+    return torch.tensor(avg_loss)
 
 
 # -----------------------------
@@ -200,6 +200,8 @@ def train(
         epoch_loss = train_one_epoch(
             model, model_ema, dataloader, optimizer_manager, criterion, device, epoch, amp_dtype
         )
+        if dist_utils.is_distributed():
+            dist_utils.reduce_tensor(epoch_loss)
         epoch_time = time.time() - t0
 
         # Metrics and model checkpointing (only on main process)

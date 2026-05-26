@@ -87,7 +87,7 @@ def test_backward_divides_loss_by_accumulate_steps(simple_model):
         torch.manual_seed(1)
         x = torch.rand(2, 4)
         loss = m(x).sum()
-        manager.backward({"all": loss})
+        manager.backward({"all": loss}, model=m)
         return m.weight.grad.clone()
 
     grad_1 = get_grad(1)
@@ -134,9 +134,59 @@ def test_backward_skips_no_grad_losses(simple_model):
     assert grad_loss.requires_grad is True
     assert no_grad_loss.requires_grad is False
 
-    manager.backward({"all": grad_loss, "monitoring": no_grad_loss})  # must not raise
+    manager.backward({"all": grad_loss, "monitoring": no_grad_loss}, model=simple_model)  # must not raise
 
     # Gradient should be present (from grad_loss) and finite.
     for p in simple_model.parameters():
         assert p.grad is not None
         assert torch.isfinite(p.grad).all()
+
+
+def test_no_sync_entered_only_on_non_final_accumulation_steps(simple_model):
+    """With accumulate_steps=2, no_sync must be entered on step 1 but NOT on step 2.
+    Step 2 is the final accumulation step where allreduce must fire."""
+    import contextlib
+
+    no_sync_enter_count = 0
+
+    @contextlib.contextmanager
+    def mock_no_sync():
+        nonlocal no_sync_enter_count
+        no_sync_enter_count += 1
+        yield
+
+    simple_model.no_sync = mock_no_sync
+    manager = _make_manager(simple_model, accumulate_steps=2)
+
+    for _ in range(2):
+        x = torch.rand(2, 4)
+        loss = simple_model(x).sum()
+        manager.backward({"all": loss}, model=simple_model)
+        manager.step()
+
+    # no_sync entered once (step 1 only); step 2 lets allreduce fire
+    assert no_sync_enter_count == 1, f"Expected no_sync entered once, got {no_sync_enter_count}"
+
+
+def test_no_sync_not_entered_when_accumulate_steps_is_one(simple_model):
+    """With accumulate_steps=1, every backward is the final step — no_sync must never be entered."""
+    import contextlib
+
+    no_sync_enter_count = 0
+
+    @contextlib.contextmanager
+    def mock_no_sync():
+        nonlocal no_sync_enter_count
+        no_sync_enter_count += 1
+        yield
+
+    simple_model.no_sync = mock_no_sync
+    manager = _make_manager(simple_model, accumulate_steps=1)
+
+    for _ in range(3):
+        x = torch.rand(2, 4)
+        loss = simple_model(x).sum()
+        manager.backward({"all": loss}, model=simple_model)
+        manager.step()
+
+    assert no_sync_enter_count == 0, f"Expected no_sync never entered, got {no_sync_enter_count}"

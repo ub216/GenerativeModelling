@@ -1,9 +1,12 @@
+import contextlib
 from typing import Dict
 
 import torch
 from loguru import logger
 from torch import optim
 from torch.amp import GradScaler
+
+import helpers.custom_types as custom_types
 
 
 class OptimizerManager:
@@ -126,7 +129,7 @@ class OptimizerManager:
         for opt in self.optimizers.values():
             opt.zero_grad(set_to_none=True)
 
-    def backward(self, losses: Dict[str, torch.Tensor]) -> None:
+    def backward(self, losses: Dict[str, torch.Tensor], model: custom_types.GenBaseModel) -> None:
         """
         Backward pass with optional gradient scaling.
 
@@ -138,10 +141,14 @@ class OptimizerManager:
             if not val.requires_grad:
                 continue  # monitoring-only loss (no grad), skip backward
             loss = val.mean() / self.accumulate_steps
-            if self.scalers[key] is not None:
-                self.scalers[key].scale(loss).backward()
-            else:
-                loss.backward()
+            # Suppress allreduce on non-final accumulation steps; let it fire on the last one.
+            is_accumulating = (self._step_count + 1) % self.accumulate_steps != 0
+            ctx = model.no_sync if (hasattr(model, "no_sync") and is_accumulating) else contextlib.nullcontext
+            with ctx():
+                if self.scalers[key] is not None:
+                    self.scalers[key].scale(loss).backward()
+                else:
+                    loss.backward()
 
     def load_state_dict(self, state_dict: Dict[str, any]) -> None:
         """
