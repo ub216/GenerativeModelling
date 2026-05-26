@@ -1,5 +1,5 @@
 import inspect
-from typing import Any, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 
 import torch
 from loguru import logger
@@ -12,21 +12,25 @@ import models
 from helpers.optimizer_manager import OptimizerManager
 
 
-def _prepare_params(cls: type, user_param_keys: set, all_params: dict) -> dict:
+def _prepare_params(callable_: type | Callable, user_param_keys: set, all_params: dict) -> dict:
     """
-    Validate user-provided config keys against cls.__init__ and return a filtered
-    params dict safe to unpack into cls(**...).
+    Validate user-provided config keys against a callable's signature and return a filtered
+    params dict safe to unpack into callable_(**...).
 
-    For constructors without **kwargs (leaf models):
-      - Raises ValueError listing any user key absent from the constructor's signature.
+    Works for both classes (inspects __init__) and plain functions.
+
+    For callables without **kwargs (leaf models, loader functions):
+      - Raises ValueError listing any user key absent from the signature.
       - Returns all_params filtered to only accepted keys, silently dropping
-        factory-injected keys (e.g. image_size, in_channels) the constructor does not need.
+        factory-injected keys (e.g. image_size, in_channels, batch_size) the callable
+        does not need.
 
-    For constructors with **kwargs (intermediate/wrapper models):
-      - Returns all_params unchanged; leaf constructor validation will surface unknown
-        keys when forwarded kwargs reach a strict leaf.
+    For callables with **kwargs (intermediate/wrapper models):
+      - Returns all_params unchanged; leaf validation will surface unknown keys when
+        forwarded kwargs reach a strict callable.
     """
-    sig = inspect.signature(cls.__init__)
+    target = callable_.__init__ if isinstance(callable_, type) else callable_
+    sig = inspect.signature(target)
     has_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
     if has_var_keyword:
         return all_params
@@ -39,7 +43,8 @@ def _prepare_params(cls: type, user_param_keys: set, all_params: dict) -> dict:
     unknown = user_param_keys - accepted
     if unknown:
         raise ValueError(
-            f"Unrecognised config parameters for {cls.__name__}: {sorted(unknown)}. " f"Accepted: {sorted(accepted)}"
+            f"Unrecognised config parameters for {callable_.__name__}: {sorted(unknown)}. "
+            f"Accepted: {sorted(accepted)}"
         )
     return {k: v for k, v in all_params.items() if k in accepted}
 
@@ -47,6 +52,8 @@ def _prepare_params(cls: type, user_param_keys: set, all_params: dict) -> dict:
 def get_dataset(cfg: Dict[str, Any], batch_size=None) -> torch.utils.data.DataLoader:
     name = cfg["type"].lower()
     params = cfg.get("params", {})
+    # Capture keys the user explicitly set before factory injects batch_size.
+    user_param_keys = set(params.keys())
     logger.info(f"Dataset params: {params}")
     if batch_size is not None and "batch_size" not in params:
         params["batch_size"] = batch_size
@@ -58,11 +65,13 @@ def get_dataset(cfg: Dict[str, Any], batch_size=None) -> torch.utils.data.DataLo
         params["batch_size"] = batch_size
 
     if name == "mnist":
-        return loaders.get_mnist_dataloader(**params)
+        return loaders.get_mnist_dataloader(**_prepare_params(loaders.get_mnist_dataloader, user_param_keys, params))
     elif name == "celeb":
-        return loaders.get_celeb_dataloader(**params)
+        return loaders.get_celeb_dataloader(**_prepare_params(loaders.get_celeb_dataloader, user_param_keys, params))
     elif name == "celeb_hq":
-        return loaders.get_celeb_hq_dataloader(**params)
+        return loaders.get_celeb_hq_dataloader(
+            **_prepare_params(loaders.get_celeb_hq_dataloader, user_param_keys, params)
+        )
     else:
         raise ValueError(f"Unknown dataset: {name}")
 

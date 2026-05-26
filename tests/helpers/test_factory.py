@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from helpers.factory import get_loss_function, get_model, get_optimizer_manager
+from helpers.factory import get_dataset, get_loss_function, get_model, get_optimizer_manager
 from helpers.optimizer_manager import OptimizerManager
 from losses.gan_hinge_loss import GANHingeLoss
 from losses.pair_mse import PairMSELoss
@@ -40,6 +40,28 @@ _VAE_PARAMS = dict(
 # image_size tuple passed to get_model: (H, W, C)
 _IMG_SIZE_1CH = (8, 8, 1)
 _IMG_SIZE_3CH = (8, 8, 3)
+
+
+# ---------------------------------------------------------------------------
+# get_dataset
+# ---------------------------------------------------------------------------
+
+
+class TestGetDataset:
+    def test_unknown_dataset_raises_value_error(self):
+        with pytest.raises(ValueError):
+            get_dataset({"type": "imagenet", "params": {"root": "/tmp"}})
+
+    def test_unrecognised_param_raises_value_error(self):
+        with pytest.raises(ValueError, match="Unrecognised config parameters for get_mnist_dataloader"):
+            get_dataset({"type": "mnist", "params": {"root": "/tmp", "typo_param": True}})
+
+    def test_factory_injected_batch_size_not_flagged(self):
+        # batch_size is injected by the factory; user did not set it, so it must not be
+        # flagged as an unrecognised param — validation fires before I/O so a bad root
+        # raises FileNotFoundError/OSError, not ValueError.
+        with pytest.raises((FileNotFoundError, OSError, RuntimeError)):
+            get_dataset({"type": "mnist", "params": {"root": "/nonexistent"}}, batch_size=4)
 
 
 # ---------------------------------------------------------------------------
