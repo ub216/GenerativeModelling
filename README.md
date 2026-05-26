@@ -15,18 +15,18 @@ As an example of its usage, we demonstrate image-to-video generation for facial 
 - WandB for logging and monitoring expriments
 
 ## TODOs
-- [x] Add support for diffusion network
-- [x] Add support for flow matching
-- [x] Add support for [MeanFlow](https://arxiv.org/abs/2505.13447) (one-step generation)
-- [ ] Add support for GANs
-- [x] Add support for CFG in diffusion/flow
-- [x] Add support for latent diffusion model
+- [x] Add support for diffusion network, flow matching, [MeanFlow](https://arxiv.org/abs/2505.13447) (one-step generation)
+- [x] Add support for CFG
+- [x] Add support for latent models
 - [x] Add DiT blocks
 - [x] Add support for DPO training
 - [x] Add some results
+- [x] Add multi-gpu training support via DDP
 - [ ] Integrate NVIDIA's [FastGen](https://github.com/NVlabs/FastGen) to support diffusion distillation
-- [ ] Add multi-gpu training support
+- [ ] Add multi-gpu training support via FSDP
 - [ ] Create a Gradio app for editing smile
+- [ ] Add DiT backbone network
+- [ ] Test GAN stability for CelebA
 
 ## Getting Started
 
@@ -117,16 +117,17 @@ You can donwload this model from [here](https://drive.google.com/file/d/1Pb9B6iu
 
 ## Repository Structure
 
-- [`train.py`](train.py): Script to train generative models.
-- [`eval.py`](eval.py): Script to evaluate trained models.
-- [`edit.py`](edit.py): Script to edit an image using pre-trained diffusion model.
+- [`train.py`](train.py): Entry point for training.
+- [`eval.py`](eval.py): Entry point for evaluation.
+- [`edit.py`](edit.py): Entry point for image editing with a pre-trained diffusion model.
+- [`engine/`](engine/): Training and evaluation logic (trainer, evaluator, factory, optimizer manager).
 - [`configs/`](configs/): YAML configuration files for experiments.
 - [`models/`](models/): Model architectures.
 - [`losses/`](losses/): Loss functions for training.
 - [`metrics/`](metrics/): Evaluation metrics.
 - [`loaders/`](loaders/): Dataset loaders.
-- [`helpers/`](helpers/): Factory functions and classes.
-- [`edit_images/`](edit_images/): Use diffusion model with guidance (CFG and classifier based) to edit images.
+- [`helpers/`](helpers/): Shared utilities (distributed utils, custom types, diffusion utils).
+- [`edit_images/`](edit_images/): Guidance-based image editing (CFG and classifier-based).
 
 ## Contributing
 

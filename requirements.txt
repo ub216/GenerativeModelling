@@ -1,7 +1,9 @@
 torch
 torchvision
 tqdm
-argparse
+matplotlib
+pandas
+PyYAML
 wandb
 scipy
 opencv-python
