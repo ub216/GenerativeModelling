@@ -33,8 +33,10 @@ class LatentDiffusionModel(LatentVAEBase):
         super().__init__(renormalise=renormalise, vae_model_name=vae_model_name, device=device, compile_vae=compile_vae)
 
         # initialize diffusionModel backbone
-        # Note: in_channels is ALWAYS 4 for this VAE (latent channels)
-        kwargs.pop("in_channels", None)  # Remove if passed in kwargs
+        # in_channels is fixed at 4 (VAE latent channels); image_size is not used at init
+        kwargs.pop("in_channels", None)
+        kwargs.pop("image_size", None)
+
         self.model = DiffusionModel(
             in_channels=4,
             base_channels=base_channels,
