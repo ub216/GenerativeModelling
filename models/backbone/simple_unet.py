@@ -7,7 +7,7 @@ from torch.nn import functional as F
 
 import helpers.custom_types as custom_types
 from models.backbone.residual_conv import ResidualConv
-from models.text_model import TextModel
+from models.text_model import ClipTextModel
 from models.utils import sinusoidal_embedding
 
 
@@ -44,7 +44,7 @@ class SimpleUNet(nn.Module):
             nn.Linear(time_emb_dim, time_emb_dim),
         )
         if text_emb_dim is not None:
-            tm = TextModel(device)
+            tm = ClipTextModel(device)
             self.text_model = nn.Sequential(tm, nn.Linear(tm.dim, time_emb_dim))
 
         # Encoder
