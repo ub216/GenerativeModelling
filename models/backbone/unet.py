@@ -6,10 +6,10 @@ from torch.nn import functional as F
 
 import helpers.custom_types as custom_types
 from helpers.utils import log_once_info
-from models.backbone.dit_block import DiTBlock
+from models.backbone.dit_block_simple import DiTBlockSimple
 from models.backbone.positional_embeddings import get_2d_sincos_pos_embed_and_freqs
 from models.backbone.residual_conv import ResidualConv
-from models.text_model import TextModel
+from models.text_model import ClipTextModel
 from models.utils import sinusoidal_embedding
 
 
@@ -65,7 +65,7 @@ class UNet(nn.Module):
         )
 
         if text_emb_dim is not None:
-            tm = TextModel(device)
+            tm = ClipTextModel(device)
             self.text_model = nn.Sequential(tm, nn.Linear(tm.dim, text_emb_dim))
         else:
             self.text_model = None
@@ -100,15 +100,13 @@ class UNet(nn.Module):
             self.mid1 = ResidualConv(ch, ch, time_emb_dim=t_time_emb_dim, text_emb_dim=text_emb_dim)
             self.mid2 = ResidualConv(ch, ch, time_emb_dim=t_time_emb_dim, text_emb_dim=text_emb_dim)
         else:
-            self.mid1 = DiTBlock(
+            self.mid1 = DiTBlockSimple(
                 in_channels=ch,
-                out_channels=ch,
                 time_emb_dim=t_time_emb_dim,
                 text_emb_dim=text_emb_dim,
             )
-            self.mid2 = DiTBlock(
+            self.mid2 = DiTBlockSimple(
                 in_channels=ch,
-                out_channels=ch,
                 time_emb_dim=t_time_emb_dim,
                 text_emb_dim=text_emb_dim,
             )

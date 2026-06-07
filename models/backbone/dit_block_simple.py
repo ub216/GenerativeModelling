@@ -4,15 +4,14 @@ import torch
 import torch.nn as nn
 
 
-class DiTBlock(torch.nn.Module):
+class DiTBlockSimple(torch.nn.Module):
     def __init__(
         self,
         in_channels: int,
-        out_channels: int,
         time_emb_dim: int,
         text_emb_dim: Optional[int] = None,
         num_heads: int = 8,
-        intialise_zero: bool = True,
+        initialise_zero: bool = True,
     ):
         super().__init__()
         # attention block
@@ -33,12 +32,12 @@ class DiTBlock(torch.nn.Module):
         self.ffn = nn.Sequential(
             nn.Linear(in_channels, in_channels * 4),
             nn.GELU(),
-            nn.Linear(in_channels * 4, out_channels),
+            nn.Linear(in_channels * 4, in_channels),
         )
-        if intialise_zero:
-            self.intialise_zero()
+        if initialise_zero:
+            self.initialise_zero()
 
-    def intialise_zero(self):
+    def initialise_zero(self):
         nn.init.constant_(self.condition_projection[-1].weight, 0)
         nn.init.constant_(self.condition_projection[-1].bias, 0)
 
