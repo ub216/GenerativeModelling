@@ -5,7 +5,7 @@ import torch
 
 
 def get_2d_sincos_pos_embed_and_freqs(
-    embed_dim: int, grid_size: int | Tuple[int, int], cls_token: bool = False
+    embed_dim: int, grid_size: int | Tuple[int, int]
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     grid_size: int of the grid height and width
@@ -21,10 +21,7 @@ def get_2d_sincos_pos_embed_and_freqs(
     grid = np.stack(grid, axis=0)  # 2, h, w
 
     grid = grid.reshape([2, 1, h, w])
-    pos_embed, freq = get_2d_sincos_pos_embed_and_freqs_from_grid(embed_dim, grid)  # (H*W, D)
-    if cls_token:
-        pos_embed = np.concatenate([np.zeros([1, embed_dim]), pos_embed], axis=0)
-        freq = np.concatenate([np.zeros([1, embed_dim]), freq], axis=0)
+    pos_embed, freq = get_2d_sincos_pos_embed_and_freqs_from_grid(embed_dim, grid)  # (H*W, D), (H*W, D)
     return torch.from_numpy(pos_embed).float(), torch.from_numpy(freq).float()
 
 
@@ -40,7 +37,7 @@ def get_2d_sincos_pos_embed_and_freqs_from_grid(embed_dim: int, grid: Tuple[int,
     # For frequencies, we need to interleave the h and w frequencies to match
     # the way apply_rope expects them (first half of dimensions for h, second half for w)
     freq = np.concatenate([freq_h[:, : embed_dim // 4], freq_w[:, : embed_dim // 4]], axis=1)  # (H*W, D/2)
-    freq = np.concatenate([freq, freq], axis=1)  # (M, D)
+    freq = np.concatenate([freq, freq], axis=1)  # (H*W, D)
 
     return emb, freq
 

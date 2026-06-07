@@ -12,7 +12,6 @@ class DiTBlockCrossAttn(torch.nn.Module):
         num_heads: int = 8,
         intialise_zero: bool = True,
         bias: bool = False,
-        rope_freqs: torch.Tensor | None = None,
     ):
         super().__init__()
 
@@ -26,9 +25,7 @@ class DiTBlockCrossAttn(torch.nn.Module):
 
         # attention block
         self.s_norm = torch.nn.LayerNorm(in_channels, elementwise_affine=False)
-        self.s_attention = RMSNormAttention(
-            embed_dim=in_channels, num_heads=num_heads, bias=bias, rope_freqs=rope_freqs
-        )
+        self.s_attention = RMSNormAttention(embed_dim=in_channels, num_heads=num_heads, bias=bias)
 
         # cross attention block does not use RoPE, as text embeddings are not spatial
         # and thus do not benefit from relative positional encoding
@@ -55,6 +52,7 @@ class DiTBlockCrossAttn(torch.nn.Module):
         x: torch.Tensor,
         time_emb: torch.Tensor,
         text_emb: torch.Tensor,
+        rope_freqs: torch.Tensor,
     ) -> torch.Tensor:
 
         # Process Conditionings
@@ -68,14 +66,14 @@ class DiTBlockCrossAttn(torch.nn.Module):
         normed_x = self.s_norm(x)
         # apply scale and shift (gamma and beta)
         normed_x = normed_x * (1 + gamma1) + beta1
-        attn_output = self.s_attention(normed_x, normed_x)
+        attn_output = self.s_attention(normed_x, normed_x, rope_freqs)  # self attention uses RoPE
         # apply gate (alpha)
         x_attn = x + (alpha1 * attn_output)
 
         # Cross attention block with adaLN-Zero
         normed_x = self.c_norm(x_attn)
         normed_x = normed_x * (1 + gamma2) + beta2
-        attn_output = self.c_attention(normed_x, text_emb)
+        attn_output = self.c_attention(normed_x, text_emb, None)  # cross attention does not use RoPE
         # apply gate (alpha)
         x_attn = x_attn + (alpha2 * attn_output)
 
@@ -96,7 +94,6 @@ class RMSNormAttention(nn.Module):
         num_heads: int,
         dropout: float = 0.0,
         bias: bool = False,
-        rope_freqs: torch.Tensor | None = None,
     ):
         super().__init__()
         if embed_dim % num_heads != 0:
@@ -112,14 +109,8 @@ class RMSNormAttention(nn.Module):
         self.query_norm = nn.RMSNorm(embed_dim // num_heads)
         self.key_norm = nn.RMSNorm(embed_dim // num_heads)
         self.dropout = dropout
-        if rope_freqs is not None and rope_freqs.shape[1] != embed_dim // num_heads:
-            raise ValueError(
-                f"RoPE frequencies shape {rope_freqs.shape} incompatible with "
-                f"embed_dim {embed_dim} and num_heads {num_heads}"
-            )
-        self.register_buffer("rope_freqs", rope_freqs)  # (L, Ch)
 
-    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, y: torch.Tensor, rope_freqs: torch.Tensor | None) -> torch.Tensor:
         query = self.query_proj(x)  # (B, N, C)
         key = self.key_proj(y)  # (B, N, C)
         value = self.value_proj(y)  # (B, N, C)
@@ -131,9 +122,9 @@ class RMSNormAttention(nn.Module):
         query = self.query_norm(query)
         key = self.key_norm(key)
 
-        if self.rope_freqs is not None:
-            query = apply_rope(query, self.rope_freqs)
-            key = apply_rope(key, self.rope_freqs)
+        if rope_freqs is not None:
+            query = apply_rope(query, rope_freqs)
+            key = apply_rope(key, rope_freqs)
 
         # Use Flash Attention if available, otherwise fall back to manual scaled dot-product attention
         out = torch.nn.functional.scaled_dot_product_attention(
