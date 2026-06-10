@@ -187,3 +187,54 @@ class TestGetOptimizerManager:
         cfg = {"type": "sgd", "params": {"lr": 1e-3}}
         with pytest.raises(ValueError):
             get_optimizer_manager(cfg, model)
+
+    def test_no_scheduler_key_gives_empty_schedulers(self):
+        model = VAE(**_VAE_PARAMS, in_channels=1, image_size=8)
+        cfg = {"type": "adam", "params": {"lr": 1e-3}}
+        manager = get_optimizer_manager(cfg, model, total_steps=100)
+        assert manager.schedulers == {}
+
+    def test_cosine_scheduler_creates_lambda_lr(self):
+        model = VAE(**_VAE_PARAMS, in_channels=1, image_size=8)
+        cfg = {
+            "type": "adam",
+            "params": {"lr": 1e-3},
+            "scheduler": {"type": "cosine", "params": {"eta_min": 1e-6}},
+        }
+        manager = get_optimizer_manager(cfg, model, total_steps=1000)
+        assert "all" in manager.schedulers
+        assert isinstance(manager.schedulers["all"], torch.optim.lr_scheduler.LambdaLR)
+
+    def test_cosine_warmup_scheduler_creates_lambda_lr(self):
+        model = VAE(**_VAE_PARAMS, in_channels=1, image_size=8)
+        cfg = {
+            "type": "adam",
+            "params": {"lr": 1e-3},
+            "scheduler": {"type": "cosine_warmup", "params": {"warmup_steps": 50, "eta_min": 1e-6}},
+        }
+        manager = get_optimizer_manager(cfg, model, total_steps=1000)
+        assert isinstance(manager.schedulers["all"], torch.optim.lr_scheduler.LambdaLR)
+
+    def test_unknown_scheduler_raises_value_error(self):
+        model = VAE(**_VAE_PARAMS, in_channels=1, image_size=8)
+        cfg = {
+            "type": "adam",
+            "params": {"lr": 1e-3},
+            "scheduler": {"type": "polynomial", "params": {}},
+        }
+        with pytest.raises(ValueError, match="Unknown scheduler"):
+            get_optimizer_manager(cfg, model, total_steps=1000)
+
+    def test_scheduler_zero_total_steps_warns(self):
+        from unittest.mock import patch
+
+        model = VAE(**_VAE_PARAMS, in_channels=1, image_size=8)
+        cfg = {
+            "type": "adam",
+            "params": {"lr": 1e-3},
+            "scheduler": {"type": "cosine", "params": {}},
+        }
+        with patch("engine.factory.logger") as mock_logger:
+            get_optimizer_manager(cfg, model, total_steps=0)
+        mock_logger.warning.assert_called()
+        assert any("total_steps" in str(call) for call in mock_logger.warning.call_args_list)

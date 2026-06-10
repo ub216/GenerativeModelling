@@ -1,4 +1,5 @@
 import inspect
+import math
 from typing import Any, Callable, Dict, List, Tuple
 
 import torch
@@ -241,10 +242,46 @@ def _get_optimizer(name: str, paramertes, options: Dict[str, Any]) -> torch.opti
         raise ValueError(f"Unknown optimizer: {name}")
 
 
+def _get_scheduler(
+    name: str,
+    optimizer: torch.optim.Optimizer,
+    total_steps: int,
+    params: Dict[str, Any],
+) -> torch.optim.lr_scheduler.LRScheduler:
+    base_lr = optimizer.param_groups[0]["lr"]
+    if name.lower() == "cosine_warmup":
+        warmup_steps = params.get("warmup_steps", 0)
+        eta_min = params.get("eta_min", 0.0)
+        decay_steps = max(1, total_steps - warmup_steps)
+
+        def lr_lambda(step: int) -> float:
+            if step < warmup_steps:
+                return step / max(1, warmup_steps)
+            progress = (step - warmup_steps) / decay_steps
+            cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
+            # Scale cosine output from [0, 1] down to [eta_min/base_lr, 1].
+            return eta_min / base_lr + (1.0 - eta_min / base_lr) * cosine
+
+        return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    elif name.lower() == "cosine":
+        eta_min = params.get("eta_min", 0.0)
+        decay_steps = max(1, total_steps)
+
+        def lr_lambda(step: int) -> float:
+            progress = step / decay_steps
+            cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
+            return eta_min / base_lr + (1.0 - eta_min / base_lr) * cosine
+
+        return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    else:
+        raise ValueError(f"Unknown scheduler: {name!r}. Available: cosine, cosine_warmup")
+
+
 def get_optimizer_manager(
     cfg: Dict[str, Any],
     model: custom_types.GenBaseModel,
     amp_dtype: torch.dtype | None = torch.float16,
+    total_steps: int = 0,
 ) -> OptimizerManager:
     optimizer = {}
     if "type" in cfg:
@@ -256,6 +293,18 @@ def get_optimizer_manager(
             if module is None:
                 raise ValueError(f"'{name}' does not exist in model parameter groups")
             optimizer[name] = _get_optimizer(key["type"], module.parameters(), key.get("params", {}))
+
+    scheduler_cfg = cfg.get("scheduler")
+    schedulers = {}
+    if scheduler_cfg is not None:
+        if total_steps == 0:
+            logger.warning(
+                "Scheduler configured but total_steps=0 — LR will not decay. "
+                "Pass total_steps to get_optimizer_manager."
+            )
+        for key, opt in optimizer.items():
+            schedulers[key] = _get_scheduler(scheduler_cfg["type"], opt, total_steps, scheduler_cfg.get("params", {}))
+
     # GradScaler is only needed for FP16 overflow recovery; BF16 and disabled AMP don't need it
     use_scaler = amp_dtype == torch.float16
     optimizer_manager = OptimizerManager(
@@ -264,5 +313,6 @@ def get_optimizer_manager(
         use_scaler=use_scaler,
         accumulate_steps=cfg.get("accumulate_steps", 1),
         max_grad_norm=cfg.get("max_grad_norm", float("inf")),
+        schedulers=schedulers,
     )
     return optimizer_manager
