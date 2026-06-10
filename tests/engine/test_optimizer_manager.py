@@ -106,11 +106,11 @@ def test_state_dict_roundtrip(simple_model):
     manager2 = OptimizerManager({"all": opt2}, model=simple_model, use_scaler=False)
     manager2.load_state_dict(state)
 
-    for key in state:
-        for k, v in state[key]["state"].items():
+    for key in state["optimizers"]:
+        for k, v in state["optimizers"][key]["state"].items():
             for param_key, val in v.items():
                 if isinstance(val, torch.Tensor):
-                    assert torch.equal(val, manager2.state_dict()[key]["state"][k][param_key])
+                    assert torch.equal(val, manager2.state_dict()["optimizers"][key]["state"][k][param_key])
 
 
 def test_step_returns_grad_norm_metrics(simple_model):
@@ -190,3 +190,98 @@ def test_no_sync_not_entered_when_accumulate_steps_is_one(simple_model):
         manager.step()
 
     assert no_sync_enter_count == 0, f"Expected no_sync never entered, got {no_sync_enter_count}"
+
+
+# ---------------------------------------------------------------------------
+# Scheduler tests
+# ---------------------------------------------------------------------------
+
+
+def _make_manager_with_scheduler(model, accumulate_steps=1):
+    opt = torch.optim.Adam(model.parameters(), lr=1e-2)
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda=lambda step: 1.0)
+    return OptimizerManager(
+        {"all": opt},
+        model=model,
+        use_scaler=False,
+        accumulate_steps=accumulate_steps,
+        schedulers={"all": sched},
+    )
+
+
+def test_scheduler_steps_on_optimizer_update(simple_model):
+    manager = _make_manager_with_scheduler(simple_model)
+    x = torch.rand(2, 4)
+    simple_model(x).sum().backward()
+    manager.step()
+    # LambdaLR starts at last_epoch=0 before any step; after one step it is 1.
+    assert manager.schedulers["all"].last_epoch == 1
+
+
+def test_scheduler_not_stepped_on_accumulation_skip(simple_model):
+    manager = _make_manager_with_scheduler(simple_model, accumulate_steps=2)
+    x = torch.rand(2, 4)
+    simple_model(x).sum().backward()
+    manager.step()  # step_count=1, not an update boundary → scheduler must NOT step
+    assert manager.schedulers["all"].last_epoch == 0
+
+
+def test_state_dict_new_format_keys(simple_model):
+    manager = _make_manager_with_scheduler(simple_model)
+    state = manager.state_dict()
+    assert "optimizers" in state
+    assert "schedulers" in state
+
+
+def test_state_dict_roundtrip_with_scheduler(simple_model):
+    manager = _make_manager_with_scheduler(simple_model)
+    x = torch.rand(2, 4)
+    simple_model(x).sum().backward()
+    manager.step()
+    state = manager.state_dict()
+
+    opt2 = torch.optim.Adam(simple_model.parameters(), lr=1e-2)
+    sched2 = torch.optim.lr_scheduler.LambdaLR(opt2, lr_lambda=lambda step: 1.0)
+    manager2 = OptimizerManager({"all": opt2}, model=simple_model, use_scaler=False, schedulers={"all": sched2})
+    manager2.load_state_dict(state)
+    assert manager2.schedulers["all"].last_epoch == manager.schedulers["all"].last_epoch
+
+
+def test_load_state_dict_legacy_format_compat(simple_model):
+    # Build a legacy-format state dict (old checkpoint without "optimizers" wrapper).
+    opt = torch.optim.Adam(simple_model.parameters(), lr=1e-2)
+    x = torch.rand(2, 4)
+    simple_model(x).sum().backward()
+    opt.step()
+    legacy_state = {"all": opt.state_dict()}
+
+    manager = _make_manager(simple_model)
+    manager.load_state_dict(legacy_state)  # must not raise
+
+
+def test_load_state_dict_missing_scheduler_warns(simple_model):
+    from unittest.mock import patch
+
+    manager = _make_manager_with_scheduler(simple_model)
+    x = torch.rand(2, 4)
+    simple_model(x).sum().backward()
+    manager.step()
+
+    # Build a new-format state dict but strip the scheduler key.
+    state = manager.state_dict()
+    del state["schedulers"]
+
+    manager2 = _make_manager_with_scheduler(simple_model)
+    with patch("engine.optimizer_manager.logger") as mock_logger:
+        manager2.load_state_dict(state)
+    mock_logger.warning.assert_called_once()
+    assert "scheduler" in mock_logger.warning.call_args[0][0].lower()
+
+
+def test_step_returns_lr_metrics(simple_model):
+    manager = _make_manager_with_scheduler(simple_model)
+    x = torch.rand(2, 4)
+    simple_model(x).sum().backward()
+    metrics = manager.step()
+    assert "lr/all" in metrics
+    assert isinstance(metrics["lr/all"], float)

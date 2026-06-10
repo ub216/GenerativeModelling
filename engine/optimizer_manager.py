@@ -1,5 +1,5 @@
 import contextlib
-from typing import Dict
+from typing import Dict, Optional
 
 import torch
 from loguru import logger
@@ -17,17 +17,20 @@ class OptimizerManager:
         use_scaler: bool = True,
         accumulate_steps: int = 1,
         max_grad_norm: float = float("inf"),
+        schedulers: Optional[Dict[str, Optional[torch.optim.lr_scheduler.LRScheduler]]] = None,
     ) -> None:
         self.model = model
         self.optimizers = optimizers
         self.max_grad_norm = max_grad_norm
         self.accumulate_steps = accumulate_steps
         self._step_count = 0
+        self.schedulers = schedulers or {}
 
         self.scalers = {key: GradScaler() if use_scaler else None for key in optimizers.keys()}
         logger.info(
             f"Initialized OptimizerManager with optimizers: {list(optimizers.keys())} "
-            f"and use_scaler={use_scaler}, accumulate_steps={accumulate_steps}, max_grad_norm={max_grad_norm}"
+            f"and use_scaler={use_scaler}, accumulate_steps={accumulate_steps}, max_grad_norm={max_grad_norm}, "
+            f"schedulers={list(self.schedulers.keys()) if self.schedulers else []}"
         )
 
     def _get_params_for_key(self, key: str):
@@ -111,6 +114,12 @@ class OptimizerManager:
             else:
                 opt.step()
 
+        # step schedulers once per optimizer update and record current LR
+        for key, sched in self.schedulers.items():
+            if sched is not None:
+                sched.step()
+                metrics[f"lr/{key}"] = sched.get_last_lr()[0]
+
         return metrics
 
     def _get_grad_norm(self, model: torch.nn.Module) -> float:
@@ -152,13 +161,33 @@ class OptimizerManager:
 
     def load_state_dict(self, state_dict: Dict[str, any]) -> None:
         """
-        Load optimizer states from state_dict.
+        Load optimizer (and optionally scheduler) states from a checkpoint.
+
+        Accepts both the current format {"optimizers": {...}, "schedulers": {...}} and
+        the legacy format {key: opt_state_dict} written by older checkpoints.
         """
-        for key, opt in self.optimizers.items():
-            opt.load_state_dict(state_dict[key])
+        if "optimizers" in state_dict:
+            for key, opt in self.optimizers.items():
+                opt.load_state_dict(state_dict["optimizers"][key])
+            if "schedulers" in state_dict:
+                for key, sched in self.schedulers.items():
+                    if sched is not None and key in state_dict["schedulers"]:
+                        sched.load_state_dict(state_dict["schedulers"][key])
+            elif self.schedulers:
+                logger.warning("Checkpoint has no scheduler state — scheduler(s) will start from step 0.")
+        else:
+            # Legacy format written before scheduler support was added.
+            logger.warning(
+                "Loading optimizer state in legacy format (no scheduler state). " "Scheduler(s) will start from step 0."
+            )
+            for key, opt in self.optimizers.items():
+                opt.load_state_dict(state_dict[key])
 
     def state_dict(self) -> Dict[str, any]:
         """
-        Get state dict of all optimizers.
+        Return optimizer and scheduler states for checkpointing.
         """
-        return {key: opt.state_dict() for key, opt in self.optimizers.items()}
+        return {
+            "optimizers": {key: opt.state_dict() for key, opt in self.optimizers.items()},
+            "schedulers": {key: sched.state_dict() for key, sched in self.schedulers.items() if sched is not None},
+        }
