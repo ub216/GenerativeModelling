@@ -5,7 +5,7 @@ experiment:
 model:
   type: "latent_mean_flow"
   params:
-    test_timesteps: 1                  # one-step generation (arXiv:2505.13447)
+    test_timesteps: 2                  # one-step generation (arXiv:2505.13447)
     base_channels: 128
     channel_mults: [1, 2, 4]
     num_blocks: [2, 2, 4]
@@ -21,22 +21,27 @@ model:
     logit_mu: -0.4                     # logit-normal μ for time sampling
     drop_condition_ratio: 0.1          # 10% unconditional training (Sec 4.2)
     sample_condition_weight: 1.0       # ω = 1.0 (ImageNet B/2 Table 4)
-  checkpoint: ""
+  checkpoint: "/data/repos/personal/GenerativeModelling/runs/latent_mean_flow_celeb_20260526-141130/epoch_251.pth"
   checkpoint_weights_only: true
 
 optimizer:
   type: "adamw"
   params:
-    lr: 0.0001
+    lr: 0.00005
     weight_decay: 0.01
   accumulate_steps: 1
   max_grad_norm: 1.0
+  scheduler:
+    type: "cosine_warmup"
+    params:
+      warmup_steps: 500
+      eta_min: 1.0e-6
 
 training:
-  batch_size: 96
-  epochs: 300
+  batch_size: 32
+  epochs: 101
   device: "cuda"
-  metric_interval: 1000
+  metric_interval: 200
   ema_decay: 0.9999
   save_after_epoch: 10
   amp_dtype: "auto"                    # "auto" | "bfloat16" | "float16" | "disabled"
@@ -58,13 +63,14 @@ dataset:
     attr_target: "smiling"
 
 loss:
-  type: "pair_mse"                     # adaptive MSE: w=1/(||Δ||²+eps)^p downweights large residuals (ECT / MeanFlow B.2)
+  type: "mean_flow_mse"                # splits wandb logging into boundary (r==t) and meanflow (r<t) sub-losses
   params:
     reduction: "adaptive"
     adaptive_power: 0.5                # p=0.5 matches ECT (arXiv:2406.14548); equivalent to Pseudo-Huber
 
 metrics:
-  fid:
-    type: "fid_inception"
+  cmmd:
+    type: "cmmd_clip"
     params:
-      samples: 8000
+      samples: 5000
+      primary_metric: true

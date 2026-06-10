@@ -17,7 +17,7 @@ model:
     renormalise: true
     compile_vae: true
     schedule_type: "linear"
-  checkpoint: runs/latent_diffusion_celeb_hq_20260130-104518/epoch_301_truncated.pth     # Use for evaluation or restarting training
+  checkpoint: "runs/latent_diffusion_celeb_20260609-094029/epoch_131.pth" #runs/latent_diffusion_celeb_hq_20260130-104518/epoch_301_truncated.pth     # Use for evaluation or restarting training
 
 optimizer:
   type: "adamw"
@@ -26,6 +26,11 @@ optimizer:
     weight_decay: 0.01
   accumulate_steps: 1                   # Number of steps to accumulate gradients over
   max_grad_norm: 1.0                    # Set to inf to disable gradient clipping
+  scheduler:
+    type: "cosine_warmup"
+    params:
+      warmup_steps: 500
+      eta_min: 1.0e-6
 
 training:
   batch_size: 96
@@ -36,19 +41,20 @@ training:
   save_after_epoch: 10                # Save all checkpoints after this epoch
   amp_dtype: "auto"                     # "auto" | "bfloat16" | "float16" | "disabled"
   sample_interval: 1                    # generate sample images every N epochs (independent of metric_interval)
+  num_fixed_samples: 3
 
 evaluation:
   samples: 64                          # Only used for evaluation run
 
 dataset:
-  type: "celeb_hq"                         # options: mnist (imagenet, coco, .. in future)
+  type: "celeb"
   params:
-    root: "/data/datasets/CelebA/celeba_hq/"
+    root: "/data/datasets/CelebA/"
     num_workers: 8
     pin_memory: true
     persistent_workers: true
-    image_size: [256, 256]
-    attr_target: "smiling"          # Only for CelebA dataset
+    image_size: [128, 128]
+    attr_target: "smiling"         # Only for CelebA dataset
 
 loss:
   type: "pair_mse"                      # options: vae_loss, pair_mse

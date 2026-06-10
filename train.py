@@ -100,7 +100,11 @@ def main(config_path: str = "config.yaml"):
         criterion = get_loss_function(cfg["loss"])
 
         # Setup Optimizer. This is done after the model is intialized
-        optimizer_manager = get_optimizer_manager(cfg["optimizer"], model, amp_dtype=amp_dtype)
+        steps_per_epoch = len(dataloader)
+        accumulate_steps = cfg["optimizer"].get("accumulate_steps", 1)
+        total_steps = cfg["training"]["epochs"] * steps_per_epoch // accumulate_steps
+        logger.info(f"Total optimizer update steps: {total_steps}")
+        optimizer_manager = get_optimizer_manager(cfg["optimizer"], model, amp_dtype=amp_dtype, total_steps=total_steps)
 
         # Load checkpoint if provided
         start_epoch = 0

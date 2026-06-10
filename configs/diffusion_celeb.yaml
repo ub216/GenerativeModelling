@@ -23,6 +23,11 @@ optimizer:
     weight_decay: 0.01
   accumulate_steps: 1                   # Number of steps to accumulate gradients over
   max_grad_norm: 1.0                    # Set to inf to disable gradient clipping
+  scheduler:
+    type: "cosine_warmup"
+    params:
+      warmup_steps: 500
+      eta_min: 1.0e-6
 
 training:
   batch_size: 192

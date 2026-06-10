@@ -13,6 +13,7 @@ optimizer:
   params:
     lr: 0.001
     weight_decay: 0.0
+  scheduler: null                    # set type: cosine_warmup to enable LR decay
 
 training:
   batch_size: 64
